@@ -25,14 +25,14 @@ async def notify_next_stage(ctx, series_name, chapter, series_job):
                 rd_completed = True
             else:
                 assignment = ctx.bot.database.assignments.get(chapter.chapter_id, rd_series_job[0].series_job_id)
-                if assignment.status == JobStatus.Completed:
+                if assignment and assignment.status == JobStatus.Completed:
                     rd_completed = True
 
             if not cl_series_job:
                 cl_completed = True
             else:
                 assignment = ctx.bot.database.assignments.get(chapter.chapter_id, cl_series_job[0].series_job_id)
-                if assignment.status == JobStatus.Completed:
+                if assignment and assignment.status == JobStatus.Completed:
                     cl_completed = True
 
             return rd_completed and cl_completed
@@ -48,14 +48,14 @@ async def notify_next_stage(ctx, series_name, chapter, series_job):
                 rd_completed = True
             else:
                 assignment = ctx.bot.database.assignments.get(chapter.chapter_id, rd_series_job[0].series_job_id)
-                if assignment.status == JobStatus.Completed:
+                if assignment and assignment.status == JobStatus.Completed:
                     rd_completed = True
 
             if not cl_series_job :
                 cl_completed = True
             else:
                 assignment = ctx.bot.database.assignments.get(chapter.chapter_id, cl_series_job[0].series_job_id)
-                if assignment.status == JobStatus.Completed:
+                if assignment and assignment.status == JobStatus.Completed:
                     cl_completed = True
 
             return rd_completed and cl_completed
@@ -71,7 +71,7 @@ async def notify_next_stage(ctx, series_name, chapter, series_job):
                 rd_completed = True
             else:
                 assignment = ctx.bot.database.assignments.get(chapter.chapter_id, rd_series_job[0].series_job_id)
-                if assignment.status == JobStatus.Completed:
+                if assignment and assignment.status == JobStatus.Completed:
                     rd_completed = True
 
             if not pr_series_job:
@@ -79,13 +79,13 @@ async def notify_next_stage(ctx, series_name, chapter, series_job):
                 tl_series_job = ctx.bot.database.jobs.get_added_by_type(series_name, JobType.Translation)
                 if tl_series_job:
                     assignment = ctx.bot.database.assignments.get(chapter.chapter_id, tl_series_job[0].series_job_id)
-                    if assignment.status == JobStatus.Completed:
+                    if assignment and assignment.status == JobStatus.Completed:
                         pr_completed = True
                 else:
                     pr_completed = True
             else:
                 assignment = ctx.bot.database.assignments.get(chapter.chapter_id, pr_series_job[0].series_job_id)
-                if assignment.status == JobStatus.Completed:
+                if assignment and assignment.status == JobStatus.Completed:
                     pr_completed = True
 
             return rd_completed and pr_completed
@@ -101,7 +101,7 @@ async def notify_next_stage(ctx, series_name, chapter, series_job):
                 cl_completed = True
             else:
                 assignment = ctx.bot.database.assignments.get(chapter.chapter_id, cl_series_job[0].series_job_id)
-                if assignment.status == JobStatus.Completed:
+                if assignment and assignment.status == JobStatus.Completed:
                     cl_completed = True
 
             if not pr_series_job:
@@ -109,13 +109,13 @@ async def notify_next_stage(ctx, series_name, chapter, series_job):
                 tl_series_job = ctx.bot.database.jobs.get_added_by_type(series_name, JobType.Translation)
                 if tl_series_job:
                     assignment = ctx.bot.database.assignments.get(chapter.chapter_id, tl_series_job[0].series_job_id)
-                    if assignment.status == JobStatus.Completed:
+                    if assignment and assignment.status == JobStatus.Completed:
                         pr_completed = True
                 else:
                     pr_completed = True
             else:
                 assignment = ctx.bot.database.assignments.get(chapter.chapter_id, pr_series_job[0].series_job_id)
-                if assignment.status == JobStatus.Completed:
+                if assignment and assignment.status == JobStatus.Completed:
                     pr_completed = True
 
             return cl_completed and pr_completed
@@ -126,7 +126,7 @@ async def notify_next_stage(ctx, series_name, chapter, series_job):
                 return True
             else:
                 assignment = ctx.bot.database.assignments.get(chapter.chapter_id, sfx_series_job[0].series_job_id)
-                if assignment.status == JobStatus.Completed:
+                if assignment and assignment.status == JobStatus.Completed:
                     return True
                 return False
         elif job_type == JobType.TypesettingSFX:
@@ -136,7 +136,7 @@ async def notify_next_stage(ctx, series_name, chapter, series_job):
                 return True
             else:
                 assignment = ctx.bot.database.assignments.get(chapter.chapter_id, ts_series_job[0].series_job_id)
-                if assignment.status == JobStatus.Completed:
+                if assignment and assignment.status == JobStatus.Completed:
                     return True
                 return False
 
