@@ -137,6 +137,9 @@ class Chapter(commands.Cog):
                             pages_num: discord.Option(int, description="Number of pages for this chapter.")):
         await ctx.defer()
 
+        if not ctx.guild:
+            return await ctx.respond(embed=error(f"Not allowed in DMs."))
+
         # Sanity checks
         series = ctx.bot.database.series.get(group_name, series_name)
         if not series:
