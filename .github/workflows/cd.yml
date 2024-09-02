@@ -21,4 +21,4 @@ jobs:
           git pull origin main
           git status
           pip install -r requirements.txt --quiet
-          pm2 restart milize
+          pm2 restart milize -s
