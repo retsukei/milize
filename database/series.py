@@ -103,7 +103,6 @@ class Series:
                 JOIN groups g ON s.group_id = g.group_id
                 WHERE g.group_name = %s;
             """
-
             self.cursor.execute(query, (group_name,))
             return self.cursor.fetchall()
         except Exception as e:
