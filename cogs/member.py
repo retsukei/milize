@@ -1,4 +1,5 @@
 import discord
+import os
 from datetime import datetime
 from discord.ext import commands
 from discord.commands import SlashCommandGroup
@@ -272,3 +273,159 @@ class Member(commands.Cog):
             return await ctx.respond(embed=info(f"Authority level has been updated for <@{user.id}> to `{AuthorityLevel.to_string(authority)}`"))
 
         await ctx.respond(embed=error(f"Failed to update authority level for <@{user.id}>"))
+
+    @Member.command(description="Admits user to the staff.")
+    @check_authority(AuthorityLevel.Owner)
+    async def admit(self, ctx, user: discord.User):
+        await ctx.defer()
+
+        member = ctx.bot.database.members.get(str(user.id))
+        if member:
+            return await ctx.respond(embed=error(f"{user.mention} is already added to members in Milize. Cannot admit."))
+
+        trial_role_id = os.getenv("StaffTrialRoleId")
+        probationary_role_id = os.getenv("StaffProbationaryRoleId")
+        full_role_id = os.getenv("StaffFullRoleId")
+
+        roles_mapping = {
+            os.getenv("StaffTrialRoleId"): "Trial",
+            os.getenv("StaffProbationaryRoleId"): "Probationary",
+            os.getenv("StaffFullRoleId"): "Full"
+        }
+
+        jobs = ctx.bot.database.jobs.get_all() 
+
+        embed = discord.Embed(
+            title=f"Admit {user.display_name} to Staff",
+            description="Select the appropriate role and qualifications.",
+            color=discord.Color.blue()
+        )
+        embed.set_thumbnail(url=user.display_avatar.url)
+        embed.add_field(name="Admit as:", value="Select a role from the menu below.", inline=False)
+        embed.add_field(name="Added qualifications:", value="None", inline=False)
+        embed.add_field(name="Available qualifications:", value=", ".join([f"`{job.job_name}`" for job in jobs]), inline=False)
+
+        role_select = discord.ui.Select(
+            placeholder="Select a role...",
+            options=[
+                discord.SelectOption(label="Trial Staff", value=trial_role_id, description="Admit as Trial Staff"),
+                discord.SelectOption(label="Probationary Staff", value=probationary_role_id, description="Admit as Probationary Staff"),
+                discord.SelectOption(label="Full Staff", value=full_role_id, description="Admit as Full Staff"),
+            ]
+        )
+
+        add_button = discord.ui.Button(label="Add Qualification", style=discord.ButtonStyle.primary, custom_id="add_qualification")
+        remove_button = discord.ui.Button(label="Remove Qualification", style=discord.ButtonStyle.danger, custom_id="remove_qualification")
+        admit_button = discord.ui.Button(label="Admit", style=discord.ButtonStyle.success, custom_id="admit", row=2)
+        cancel_button = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.secondary, custom_id="cancel", row=2)
+
+        view = discord.ui.View()
+        view.add_item(role_select)
+        view.add_item(add_button)
+        view.add_item(remove_button)
+        view.add_item(admit_button)
+        view.add_item(cancel_button)
+        view.timeout = 120 # in seconds
+
+        message = await ctx.respond(embed=embed, view=view)
+
+        selected_role = None
+        added_qualifications = []
+
+        async def update_embed():
+            embed.set_field_at(1, name="Added qualifications:", value=", ".join([f"`{q.job_name}`" for q in added_qualifications]) or "None", inline=False)
+            embed.set_field_at(2, name="Available qualifications:", value=", ".join([f"`{job.job_name}`" for job in jobs]), inline=False)
+            await message.edit(embed=embed)
+
+        async def on_timeout():
+            try:
+                await message.delete()
+            except discord.DiscordException as e:
+                pass
+
+        async def role_select_callback(interaction: discord.Interaction):
+            nonlocal selected_role
+            selected_role = role_select.values[0]
+            embed.set_field_at(0, name="Admit as:", value=roles_mapping.get(selected_role) + " Staff", inline=False)
+            await interaction.response.defer()
+            await update_embed()
+
+        async def add_qualification_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return
+
+            async def qualification_modal_callback(interaction: discord.Interaction):
+                await interaction.response.defer()
+                qualification = interaction.data['components'][0]['components'][0]['value']
+                idx = next((i for i, job in enumerate(jobs) if job.job_name == qualification), None)
+                if idx is not None:
+                    added_qualifications.append(jobs[idx])
+                    del jobs[idx]
+                    await update_embed()
+
+            modal = discord.ui.Modal(discord.ui.InputText(label="Qualification", placeholder="Enter qualification name..."), title="Add Qualification" )
+            modal.callback = qualification_modal_callback
+            await interaction.response.send_modal(modal)
+
+        async def remove_qualification_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return
+
+            async def qualification_modal_callback(interaction: discord.Interaction):
+                await interaction.response.defer()
+                qualification = interaction.data['components'][0]['components'][0]['value']
+                idx = next((i for i, q in enumerate(added_qualifications) if q.job_name == qualification), None)
+                if idx is not None:
+                    jobs.append(added_qualifications[idx])
+                    del added_qualifications[idx]
+                    await update_embed()
+
+            modal = discord.ui.Modal(discord.ui.InputText(label="Qualification", placeholder="Enter qualification name..."), title="Remove Qualification" )
+            modal.callback = qualification_modal_callback
+            await interaction.response.send_modal(modal)
+
+        async def admit_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return
+
+            if not selected_role:
+                return
+
+            if not added_qualifications:
+                return
+
+            await interaction.response.defer()
+            roles_to_add = [discord.Object(id=int(selected_role))] + [discord.Object(id=int(q.role_id)) for q in added_qualifications]
+            
+            try:
+                await user.add_roles(*roles_to_add)
+                await interaction.message.edit(embed=info(f"Admitted {user.mention} to `{roles_mapping.get(selected_role)} Staff` with specified qualifications."), view=None)
+                ctx.bot.database.members.add(str(user.id), AuthorityLevel.Member)
+
+                channel = ctx.bot.get_channel(int(os.getenv("StaffChannelId")))
+                if channel:
+                    await channel.send(content=(
+                        f"Everyone, please welcome {user.mention}! They're joining as {roles_mapping.get(selected_role).lower()} staff with the following qualifications: {', '.join(f'`{q.job_name}`' for q in added_qualifications)}"
+                        f"\n\n{user.mention}, please read through https://discord.com/channels/1131989690715754602/1132960194079506534/1194692208868196465 and https://discord.com/channels/1131989690715754602/1133152558479851550/1172466011988045834 "
+                        f"to get up on how things here work. Also, feel free to introduce yourself in <#1187150382372237342>"
+                        f"\nUse `/member credit_name` command to change your credit name."
+                    ))
+            except discord.DiscordException as e:
+                print(f"An error occurred while admitting '{user.display_name}': {e}")
+
+        async def cancel_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return
+
+            await interaction.response.defer()
+            try:
+                await interaction.message.delete()
+            except discord.DiscordException as e:
+                pass            
+
+        view.on_timeout = on_timeout
+        role_select.callback = role_select_callback
+        add_button.callback = add_qualification_callback
+        remove_button.callback = remove_qualification_callback
+        admit_button.callback = admit_callback
+        cancel_button.callback = cancel_callback
