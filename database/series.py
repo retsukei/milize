@@ -157,3 +157,20 @@ class Series:
                 print(f"Failed to update series {series_name}: {e}")
                 return None
         return 0
+
+    @check_connection
+    def count_chapters(self, series_name):
+        try:
+            query = """
+            SELECT COUNT(*) AS chapter_count
+            FROM chapters c
+            JOIN series s ON c.series_id = s.series_id
+            WHERE s.series_name = %s;
+            """
+            self.cursor.execute(query, (series_name,))
+            self.connection.commit()
+            return self.cursor.fetchone().chapter_count
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to count chapters for series '{series_name}': {e}")
+            return None
