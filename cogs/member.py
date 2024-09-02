@@ -408,7 +408,7 @@ class Member(commands.Cog):
                         f"Everyone, please welcome {user.mention}! They're joining as {roles_mapping.get(selected_role).lower()} staff with the following qualifications: {', '.join(f'`{q.job_name}`' for q in added_qualifications)}"
                         f"\n\n{user.mention}, please read through https://discord.com/channels/1131989690715754602/1132960194079506534/1194692208868196465 and https://discord.com/channels/1131989690715754602/1133152558479851550/1172466011988045834 "
                         f"to get up on how things here work. Also, feel free to introduce yourself in <#1187150382372237342>"
-                        f"\nUse `/member credit_name` command to change your credit name."
+                        f"\nUse `/member credit_name` command to change your credit name and check out the job board channels for available jobs!"
                     ))
             except discord.DiscordException as e:
                 print(f"An error occurred while admitting '{user.display_name}': {e}")
