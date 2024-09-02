@@ -46,7 +46,7 @@ class Group(commands.Cog):
 
             output.append(line)
 
-        await ctx.respond(embed=info("\n\n".join(output), title="Groups in Milize"))
+        await ctx.respond(embed=info("\n".join(output), title="Groups in Milize"))
 
     @Group.command(description="Edits information of the existed group.")
     @check_authority(AuthorityLevel.Owner)
