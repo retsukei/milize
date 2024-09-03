@@ -46,9 +46,12 @@ class Assignments:
             return None
 
     @check_connection
-    def get_completed_by_user(self, user_id):
+    def get_completed_by_user(self, user_id, only_accounted = False):
         try:
-            self.cursor.execute("SELECT assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at FROM jobsassignments WHERE assigned_to = %s AND status = %s", (user_id, JobStatus.Completed))
+            if only_accounted:
+                self.cursor.execute("SELECT assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at, available_at FROM jobsassignments WHERE assigned_to = %s AND status = %s AND account = TRUE", (user_id, JobStatus.Completed))
+            else:
+                self.cursor.execute("SELECT assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at, available_at FROM jobsassignments WHERE assigned_to = %s AND status = %s", (user_id, JobStatus.Completed))
             self.connection.commit()
             return self.cursor.fetchall()
         except Exception as e:
@@ -68,9 +71,12 @@ class Assignments:
             return None
 
     @check_connection
-    def get_completed_by_user_archive(self, user_id):
+    def get_completed_by_user_archive(self, user_id, only_accounted = False):
         try:
-            self.cursor.execute("SELECT assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at FROM JobsAssignmentsArchive WHERE assigned_to = %s AND status = %s", (user_id, JobStatus.Completed))
+            if only_accounted:
+                self.cursor.execute("SELECT assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at, available_at FROM JobsAssignmentsArchive WHERE assigned_to = %s AND status = %s AND account = TRUE", (user_id, JobStatus.Completed))
+            else:
+                self.cursor.execute("SELECT assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at, available_at FROM JobsAssignmentsArchive WHERE assigned_to = %s AND status = %s", (user_id, JobStatus.Completed))
             self.connection.commit()
             return self.cursor.fetchall()
         except Exception as e:
@@ -101,20 +107,29 @@ class Assignments:
             return None
 
     @check_connection
-    def update_status(self, chapter_id, series_job_id, status):
+    def update_status(self, chapter_id, series_job_id, status, account):
         try:
             if status == JobStatus.Completed:
-                self.cursor.execute("UPDATE jobsassignments SET status = %s, completed_at = CURRENT_TIMESTAMP WHERE chapter_id = %s AND series_job_id = %s", (status, chapter_id, series_job_id))
+                self.cursor.execute("UPDATE jobsassignments SET status = %s, completed_at = CURRENT_TIMESTAMP, account = %s WHERE chapter_id = %s AND series_job_id = %s", (status, account, chapter_id, series_job_id))
             else:
                 self.cursor.execute("UPDATE jobsassignments SET status = %s WHERE chapter_id = %s AND series_job_id = %s", (status, chapter_id, series_job_id))
 
-            self.cursor.execute("UPDATE jobsassignments SET status = %s WHERE chapter_id = %s AND series_job_id = %s", (status, chapter_id, series_job_id))
             self.connection.commit()
             return self.cursor.rowcount
         except Exception as e:
             self.connection.rollback()
             print(f"Failed to update job status for chapter id '{chapter_id}': {e}")
             return None
+
+    @check_connection
+    def update_available(self, assignment_id):
+        try:
+            self.cursor.execute("UPDATE jobsassignments SET available_at = CURRENT_TIMESTAMP WHERE assignment_id = %s", (assignment_id,))
+            self.connection.commit()
+            return self.cursor.rowcount
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to update 'available_at' for assignment '{assignment_id}': {e}") 
 
     @check_connection
     def update_user(self, assignment_id, user_id):

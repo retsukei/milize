@@ -63,7 +63,9 @@ CREATE TABLE IF NOT EXISTS JobsAssignments (
     status INT DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     reminded_at TIMESTAMPTZ,
+    available_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
+    account BOOLEAN DEFAULT TRUE,
     UNIQUE(chapter_id, series_job_id)
 );
 
@@ -110,16 +112,18 @@ CREATE TABLE IF NOT EXISTS JobsAssignmentsArchive (
     status INT DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMPTZ,
+    available_at TIMESTAMPTZ,
     reminded_at TIMESTAMPTZ,
+    account BOOLEAN DEFAULT TRUE,
     archived_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE OR REPLACE FUNCTION archive_jobs_assignments() RETURNS TRIGGER AS $$
 BEGIN
     INSERT INTO JobsAssignmentsArchive
-    (assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at, reminded_at)
+    (assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at, reminded_at, available_at)
     VALUES
-    (OLD.assignment_id, OLD.chapter_id, OLD.series_job_id, OLD.assigned_to, OLD.status, OLD.created_at, OLD.completed_at, OLD.reminded_at)
+    (OLD.assignment_id, OLD.chapter_id, OLD.series_job_id, OLD.assigned_to, OLD.status, OLD.created_at, OLD.completed_at, OLD.reminded_at, OLD.available_at)
     ON CONFLICT(assignment_id) DO NOTHING;
 
     RETURN OLD;

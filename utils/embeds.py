@@ -8,3 +8,6 @@ def member_info(message: str, title: str = None):
 
 def error(message: str):
     return discord.Embed(description=message, color=discord.Color.red())
+
+def warning(message: str):
+    return discord.Embed(description=message, color=discord.Color.orange())

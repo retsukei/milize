@@ -1,8 +1,9 @@
 import discord
 import os
+from datetime import datetime, timedelta, timezone
 from discord.ext import commands
 from discord.commands import SlashCommandGroup
-from utils.embeds import info, error
+from utils.embeds import info, error, warning
 from utils.checks import check_authority
 from utils.constants import AuthorityLevel, JobStatus, JobType
 from utils.autocompletes import get_group_list, get_series_list, get_added_jobs, get_unadded_jobs, get_job_list, get_chapter_list
@@ -149,6 +150,7 @@ async def notify_next_stage(ctx, series_name, chapter, series_job):
                     member = ctx.bot.database.members.get(assignment.assigned_to)
                     if member and member.stage_notifications:
                         await ctx.send(f"<@{assignment.assigned_to}>, chapter `{chapter.chapter_name}` is ready for `{JobType.to_string(job_type)}`.")
+                        ctx.bot.database.assignments.update_available(assignment.assignment_id)
                         if job_type == JobType.Typesetting:
                             await notify_member(JobType.TypesettingSFX, assignment.assigned_to)
 
@@ -505,7 +507,11 @@ class Jobs(commands.Cog):
             user = await ctx.bot.fetch_user(assignment.assigned_to)
             return await ctx.respond(embed=error(f"Job `{job_name}` is claimed by <@{user.id}>. Not allowed to update the status."))
 
-        rows = ctx.bot.database.assignments.update_status(chapter.chapter_id, series_job.series_job_id, status)
+        account = True
+        if status == JobStatus.Completed and datetime.now(timezone.utc) - assignment.created_at < timedelta(minutes=5):
+            account = False
+
+        rows = ctx.bot.database.assignments.update_status(chapter.chapter_id, series_job.series_job_id, status, account)
         if rows is not None:
             line = f"Updated job `{job_name}` for chapter `{chapter_name}` to `{JobStatus.to_string(status)}`."
             if status == JobStatus.Completed and assignment.assigned_to == str(ctx.author.id):
@@ -537,6 +543,9 @@ class Jobs(commands.Cog):
 
                 # Next stage notification
                 await notify_next_stage(ctx, series_name, chapter, series_job)
+
+                if account == False:
+                    await ctx.send(embed=warning("The time between claiming and completing is too short. This job won't be counted towards your statistics."))
             return
 
         await ctx.respond(embed=error(f"Failed to update job."))

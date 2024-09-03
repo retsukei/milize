@@ -74,12 +74,12 @@ class Member(commands.Cog):
         if member is None:
             return await ctx.respond(embed=error(f"<@{_user.id}> is not added to members in Milize."))
 
-        assignments = ctx.bot.database.assignments.get_completed_by_user(member_id) or []
-        archived_assignments = ctx.bot.database.assignments.get_completed_by_user_archive(member_id) or []
+        assignments = ctx.bot.database.assignments.get_completed_by_user(member_id, True) or []
+        archived_assignments = ctx.bot.database.assignments.get_completed_by_user_archive(member_id, True) or []
 
         all_assignments = assignments + archived_assignments
         total_completed = len(all_assignments)
-        total_hours = sum((a.completed_at - a.created_at).total_seconds() / 3600 for a in all_assignments if a.completed_at)
+        total_hours = sum((a.completed_at - (a.created_at if a.available_at is None else a.available_at)).total_seconds() / 3600 for a in all_assignments if a.completed_at)
         
         if total_completed > 0:
             average_time = total_hours / total_completed
