@@ -314,7 +314,7 @@ class Jobs(commands.Cog):
 
         assignment = ctx.bot.database.assignments.get(chapter[0], series_job[0])
         if assignment:
-            assigned_user = await ctx.bot.get_or_fetch_user(assignment[3])
+            assigned_user = await ctx.bot.fetch_user(assignment[3])
             return await ctx.respond(embed=error(f"Job `{job_name}` for chapter `{chapter_name}` is already assigned to <@{assigned_user.id}>.\nUse `/job reassign` to reassign."))
 
         user_id = str(user.id)
@@ -423,7 +423,7 @@ class Jobs(commands.Cog):
             return await ctx.respond(embed=error(f"Job `{job_name}` is not claimed by anyone."))
 
         if assignment.assigned_to != str(ctx.author.id): # who the hell stores discord ids as integers?
-            user = await ctx.bot.get_or_fetch_user(assignment.assigned_to)
+            user = await ctx.bot.fetch_user(assignment.assigned_to)
             return await ctx.respond(embed=error(f"Job `{job_name}` is claimed by <@{user.id}>. Cannot unclaim."))
 
         rows = ctx.bot.database.assignments.delete(chapter.chapter_id, series_job.series_job_id)
@@ -456,7 +456,7 @@ class Jobs(commands.Cog):
             assignment = ctx.bot.database.assignments.get(chapter.chapter_id, series_job_id)
 
             if assignment:
-                user = await ctx.bot.get_or_fetch_user(assignment.assigned_to)
+                user = await ctx.bot.fetch_user(assignment.assigned_to)
                 member = ctx.bot.database.members.get(assignment.assigned_to)
                 field = f"Assigned to: {user.display_name if member is None or member.credit_name is None else member.credit_name}\nStatus: {JobStatus.to_string(assignment.status)}"
             else:
@@ -562,7 +562,7 @@ class Jobs(commands.Cog):
         if rows is None:
             return await ctx.respond(embed=error(f"Failed to set the job board channel."))
 
-        await ctx.respond(embed=info(f"The job board channel for job `{job_name}` has been set to <#{channel.id}>.")))
+        await ctx.respond(embed=info(f"The job board channel for job `{job_name}` has been set to <#{channel.id}>."))
 
     @Jobs.command(description="Removes job board channel for a job.")
     @check_authority(AuthorityLevel.ProjectManager)
