@@ -1,9 +1,10 @@
 import discord
-from discord.ext import commands
-from discord.commands import SlashCommandGroup
 import requests
 import re
 import os
+from discord.ext import commands
+from discord.commands import SlashCommandGroup
+from natsort import natsorted
 from utils.embeds import info, error
 from utils.checks import check_authority
 from utils.constants import AuthorityLevel, StaffLevel
@@ -118,9 +119,11 @@ class Chapter(commands.Cog):
         if not chapters:
             return await ctx.respond(embed=error(f"No chapters found for series `{series_name}`."))
 
+        sorted_names = natsorted([chapter.chapter_name for chapter in chapters])
+
         output = []
-        for i, (_, chapter_name, _) in enumerate(chapters, start=1):
-            output.append(f"{i}\\. {chapter_name}")
+        for i, chapter_name in enumerate(sorted_names, start=1):
+            output.append(f"{i}\\. `{chapter_name}`")
 
         await ctx.respond(embed=info("\n".join(output), title=f"Chapters in {series_name}"))
 

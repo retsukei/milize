@@ -143,7 +143,7 @@ class Jobs:
             FROM Jobs j
             INNER JOIN SeriesJobs sj ON j.job_id = sj.job_id
             INNER JOIN Series s ON sj.series_id = s.series_id
-            WHERE s.series_name = %s;
+            WHERE s.series_name = %s ORDER BY j.job_type ASC;
             """
             
             self.cursor.execute(query, (series_name,))
