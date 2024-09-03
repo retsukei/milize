@@ -121,9 +121,9 @@ CREATE TABLE IF NOT EXISTS JobsAssignmentsArchive (
 CREATE OR REPLACE FUNCTION archive_jobs_assignments() RETURNS TRIGGER AS $$
 BEGIN
     INSERT INTO JobsAssignmentsArchive
-    (assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at, reminded_at, available_at)
+    (assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at, reminded_at, available_at, account)
     VALUES
-    (OLD.assignment_id, OLD.chapter_id, OLD.series_job_id, OLD.assigned_to, OLD.status, OLD.created_at, OLD.completed_at, OLD.reminded_at, OLD.available_at)
+    (OLD.assignment_id, OLD.chapter_id, OLD.series_job_id, OLD.assigned_to, OLD.status, OLD.created_at, OLD.completed_at, OLD.reminded_at, OLD.available_at, OLD.account)
     ON CONFLICT(assignment_id) DO NOTHING;
 
     RETURN OLD;
