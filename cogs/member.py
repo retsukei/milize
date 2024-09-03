@@ -13,10 +13,11 @@ def format_time(hours):
     if hours >= 24:
         days = int(hours // 24)
         remaining_hours = int(hours % 24)
+        plural = "" if days == 1 else "s"
         if remaining_hours > 0:
-            return f"{days} days, {remaining_hours} hours"
+            return f"{days} day{plural}, {remaining_hours} hours"
         else:
-            return f"{days} days"
+            return f"{days} day{plural}"
     else:
         return f"{hours:.2f} hours"
 
@@ -95,6 +96,7 @@ class Member(commands.Cog):
         completed_at_dates = [convert_to_utc(a.completed_at) for a in all_assignments if a.completed_at]
         last_job = max(completed_at_dates, default=None)
         last_job_diff = (now - last_job).days if last_job else "N/A"
+        
 
         qualified_jobs = ctx.bot.database.jobs.get_by_roles([str(role.id) for role in _user.roles])
         qualified_jobs_list = ", ".join(f"`{job}`" for job in qualified_jobs) if qualified_jobs else "None"
@@ -109,7 +111,7 @@ class Member(commands.Cog):
         embed.add_field(name="Authority Level", value=AuthorityLevel.to_string(member.authority_level), inline=False)
         embed.add_field(name="Total Completed", value=total_completed, inline=False)
         embed.add_field(name="Total Time / Average", value=f"{format_time(total_hours)} / {format_time(average_time)}", inline=False)
-        embed.add_field(name="Last Completed Job", value=f"{last_job_diff} days ago", inline=False)
+        embed.add_field(name="Last Completed Job", value=f"{last_job_diff} day(s) ago", inline=False)
 
         embed.set_footer(text=f"Member since {member.created_at.strftime('%Y-%m-%d')}")
         embed.set_thumbnail(url=_user.avatar.url)
