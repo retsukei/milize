@@ -34,7 +34,7 @@ class Group(commands.Cog):
 
         output = []
         for i, (_, group_name, discord, website, creator_id, created_at) in enumerate(groups, start=1):
-            creator = await ctx.bot.fetch_user(creator_id)
+            creator = await ctx.bot.get_or_fetch_user(creator_id)
             line = f"**{i}\\. {group_name}** by {creator.display_name}"
 
             if discord and website:
