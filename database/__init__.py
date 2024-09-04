@@ -1,6 +1,5 @@
 import psycopg2
 import os
-from psycopg2 import sql
 from psycopg2.extras import NamedTupleCursor
 
 from utils.checks import check_connection

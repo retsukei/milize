@@ -1,7 +1,6 @@
 import os
 from discord.ext import commands
 from functools import wraps
-from .embeds import error
 
 def check_connection(func):
     @wraps(func)

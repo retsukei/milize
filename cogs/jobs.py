@@ -6,7 +6,7 @@ from discord.commands import SlashCommandGroup
 from utils.embeds import info, error, warning
 from utils.checks import check_authority
 from utils.constants import AuthorityLevel, JobStatus, JobType
-from utils.autocompletes import get_group_list, get_series_list, get_added_jobs, get_unadded_jobs, get_job_list, get_chapter_list
+from utils.autocompletes import get_group_list, get_series_list, get_added_jobs, get_job_list, get_chapter_list
 
 async def notify_next_stage(ctx, series_name, chapter, series_job):
     def other_stages_done(job_type):
@@ -220,7 +220,7 @@ class Jobs(commands.Cog):
         if rows and rows > 0:
             return await ctx.respond(embed=info(f"Job `{job_name}` has been successfully updated."))
 
-        await ctx.respond(embed=error(f"No updates were made."))
+        await ctx.respond(embed=error("No updates were made."))
 
     @Jobs.command(description="Deletes a job. Notice: will be deleted from everywhere.")
     @check_authority(AuthorityLevel.Owner)
@@ -266,7 +266,7 @@ class Jobs(commands.Cog):
         is_first_job = ctx.bot.database.assignments.is_first(str(ctx.author.id))
         assignment_id = ctx.bot.database.assignments.new(chapter[0], series_job[0], ctx.author.id)
         if assignment_id is None:
-            return await ctx.respond(embed=error(f"Failed to create an assignment in the database."))
+            return await ctx.respond(embed=error("Failed to create an assignment in the database."))
 
         # Remove from job board if there is a post for this job.
         jobboard_post = ctx.bot.database.boardposts.get_by_chapter(chapter[0], series_job[0])
@@ -291,7 +291,7 @@ class Jobs(commands.Cog):
         await ctx.respond(embed=info(f"Job `{job_name}` has been claimed for chapter `{chapter_name}`.\n{additional_info_message}"))
 
         if is_first_job:
-            await ctx.send(embed=info(f"Since this is your first job, please consider checking if there's any important material to read (like a style guide). Usually, it's available in the pinned messages for the channel of the series."))
+            await ctx.send(embed=info("Since this is your first job, please consider checking if there's any important material to read (like a style guide). Usually, it's available in the pinned messages for the channel of the series."))
 
     @Jobs.command(description="Assigns a job to a member.")
     @check_authority(AuthorityLevel.ProjectManager) 
@@ -324,7 +324,7 @@ class Jobs(commands.Cog):
 
         assignment_id = ctx.bot.database.assignments.new(chapter[0], series_job[0], user_id)
         if assignment_id is None:
-            return await ctx.respond(embed=error(f"Failed to create an assignment in the database."))
+            return await ctx.respond(embed=error("Failed to create an assignment in the database."))
 
         # Remove from job board if there is a post for this job.
         jobboard_post = ctx.bot.database.boardposts.get_by_chapter(chapter[0], series_job[0])
@@ -371,7 +371,7 @@ class Jobs(commands.Cog):
         if rows and rows > 0:
             return await ctx.respond(embed=info(f"Job `{job_name}` has been assigned to <@{user.id}> for chapter `{chapter_name}`."))
 
-        await ctx.respond(embed=error(f"No updates were made."))
+        await ctx.respond(embed=error("No updates were made."))
 
     @Jobs.command(description="Unassigns the job of a chapter.")
     @check_authority(AuthorityLevel.ProjectManager)
@@ -477,7 +477,7 @@ class Jobs(commands.Cog):
             line = f"{i}\\. `{job_name}` — <@&{role_id}>"
             output.append(line)
 
-        await ctx.respond(embed=info("\n".join(output), title=f"All jobs in Milize"))
+        await ctx.respond(embed=info("\n".join(output), title="All jobs in Milize"))
 
     @Jobs.command(description="Updates status of a job.")
     @check_authority(AuthorityLevel.Member)
@@ -544,11 +544,11 @@ class Jobs(commands.Cog):
                 # Next stage notification
                 await notify_next_stage(ctx, series_name, chapter, series_job)
 
-                if account == False:
+                if not account:
                     await ctx.send(embed=warning("The time between claiming and completing is too short. This job won't be counted towards your statistics."))
             return
 
-        await ctx.respond(embed=error(f"Failed to update job."))
+        await ctx.respond(embed=error("Failed to update job."))
 
     @Jobs.command(description="Sets a job board channel for the specified job.")
     @check_authority(AuthorityLevel.ProjectManager)
@@ -560,7 +560,7 @@ class Jobs(commands.Cog):
 
         rows = ctx.bot.database.jobs.set_jobboard(job_name, channel.id)
         if rows is None:
-            return await ctx.respond(embed=error(f"Failed to set the job board channel."))
+            return await ctx.respond(embed=error("Failed to set the job board channel."))
 
         await ctx.respond(embed=info(f"The job board channel for job `{job_name}` has been set to <#{channel.id}>."))
 
@@ -573,6 +573,6 @@ class Jobs(commands.Cog):
 
         rows  = ctx.bot.database.jobs.set_jobboard(job_name, None)
         if rows is None:
-            return await ctx.respond(embed=error(f"Failed to remove the job board channel."))
+            return await ctx.respond(embed=error("Failed to remove the job board channel."))
 
         await ctx.respond(embed=info(f"The job board channel for job `{job_name}` has been removed."))

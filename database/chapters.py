@@ -109,7 +109,7 @@ class Chapters:
             self.cursor.execute("SELECT * FROM chapters WHERE chapter_id = %s", (chapter_id,))
             return self.cursor.fetchone()
         except Exception as e:
-            print(f"Failed to get chapter '{chapter_id}' for series '{series_name}': {e}")
+            print(f"Failed to get chapter with ID '{chapter_id}': {e}")
             return None
 
     @check_connection

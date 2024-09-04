@@ -1,5 +1,4 @@
 from utils.checks import check_connection
-from utils.constants import AuthorityLevel
 
 class Members:
     def __init__(self, connection, cursor):
@@ -17,7 +16,7 @@ class Members:
                 return member_id[0]
             
             return None
-        except Exception as e:
+        except Exception:
             self.connection.rollback()
             print(f"Failed to add user '{user_id}' to the database.")
             return None
@@ -86,7 +85,7 @@ class Members:
     @check_connection
     def set_credit_name(self, user_id, credit_name):
         try:
-            self.cursor.execute(f"UPDATE members SET credit_name = %s WHERE discord_id = %s", (credit_name, user_id))
+            self.cursor.execute("UPDATE members SET credit_name = %s WHERE discord_id = %s", (credit_name, user_id))
             self.connection.commit()
             return self.cursor.rowcount
         except Exception as e:

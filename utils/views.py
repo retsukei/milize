@@ -1,6 +1,6 @@
 import discord
 import os
-from .embeds import info, error
+from .embeds import info
 
 class JobboardView(discord.ui.View):
     def __init__(self):
@@ -58,4 +58,4 @@ class JobboardView(discord.ui.View):
             await channel.send(content=f"Job board action from <@{member.id}>:", embed=info(f"Job `{series_job.job_name}` has been claimed for chapter `{chapter.chapter_name}` in `{series.series_name}`.\n{additional_info_message}"))
 
             if is_first_job:
-                await channel.send(embed=info(f"Since this is your first job, please consider checking if there's any important material to read (like a style guide). Usually, it's available in the pinned messages for the channel of the series."))
+                await channel.send(embed=info("Since this is your first job, please consider checking if there's any important material to read (like a style guide). Usually, it's available in the pinned messages for the channel of the series."))

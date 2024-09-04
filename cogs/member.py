@@ -7,7 +7,7 @@ from utils.embeds import info, error, member_info
 from utils.checks import check_authority
 from utils.constants import AuthorityLevel, ReminderNotification
 from utils.autocompletes import get_group_list, get_series_list
-from datetime import datetime, timezone
+from datetime import timezone
 
 def format_time(hours):
     if hours >= 24:
@@ -131,7 +131,7 @@ class Member(commands.Cog):
         if reminder is not None or jobboard is not None or stage is not None:
             rows = self.bot.database.members.update_notifications(user_id, reminder, jobboard, stage)
             if rows is None:
-                return await ctx.respond(embed=error(f"Failed to update your notification preferences."))
+                return await ctx.respond(embed=error("Failed to update your notification preferences."))
         
         member = self.bot.database.members.get(user_id)
         embed = discord.Embed(
@@ -155,10 +155,10 @@ class Member(commands.Cog):
 
         member = ctx.bot.database.members.get(str(ctx.author.id))
         if not member:
-            return await ctx.respond(embed=error(f"You're not added to members in Milize."))
+            return await ctx.respond(embed=error("You're not added to members in Milize."))
 
         if member.jobboard_notifications:
-            return await ctx.respond(embed=error(f"Please disable `jobboard_notifications` in `/member notifications` before subscribing to specific series."))
+            return await ctx.respond(embed=error("Please disable `jobboard_notifications` in `/member notifications` before subscribing to specific series."))
 
         series = ctx.bot.database.series.get(group_name, series_name)
         if not series:
@@ -183,7 +183,7 @@ class Member(commands.Cog):
 
         member = ctx.bot.database.members.get(str(ctx.author.id))
         if not member:
-            return await ctx.respond(embed=error(f"You're not added to members in Milize."))
+            return await ctx.respond(embed=error("You're not added to members in Milize."))
 
         series = ctx.bot.database.series.get(group_name, series_name)
         if not series:
@@ -205,7 +205,7 @@ class Member(commands.Cog):
 
         member = ctx.bot.database.members.get(str(ctx.author.id))
         if not member:
-            return await ctx.respond(embed=error(f"You're not added to members in Milize."))
+            return await ctx.respond(embed=error("You're not added to members in Milize."))
 
         rows = ctx.bot.database.subscriptions.delete_all(member.member_id)
         if rows is None:
@@ -255,8 +255,10 @@ class Member(commands.Cog):
         if rows is None:
             return await ctx.respond(embed=error("Failed to set the credit name."))
 
-        if credit_name is None: await ctx.respond(embed=member_info("Your custom credit name has been removed. Your Discord display name will be used."))
-        else: await ctx.respond(embed=member_info(f"Your credit name has been changed to `{credit_name}`."))
+        if credit_name is None:
+            await ctx.respond(embed=member_info("Your custom credit name has been removed. Your Discord display name will be used."))
+        else:
+            await ctx.respond(embed=member_info(f"Your credit name has been changed to `{credit_name}`."))
 
     @Member.command(description="Sets authority level for a member.")
     @check_authority(AuthorityLevel.Owner)
@@ -342,7 +344,7 @@ class Member(commands.Cog):
         async def on_timeout():
             try:
                 await message.delete()
-            except discord.DiscordException as e:
+            except discord.DiscordException:
                 pass
 
         async def role_select_callback(interaction: discord.Interaction):
@@ -422,7 +424,7 @@ class Member(commands.Cog):
             await interaction.response.defer()
             try:
                 await interaction.message.delete()
-            except discord.DiscordException as e:
+            except discord.DiscordException:
                 pass            
 
         view.on_timeout = on_timeout

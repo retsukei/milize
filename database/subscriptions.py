@@ -28,7 +28,7 @@ class Subscriptions:
             self.cursor.execute("DELETE FROM SeriesSubscriptions WHERE member_id = %s AND series_id = %s", (member_id, series_id))
             self.connection.commit()
             return self.cursor.rowcount
-        except Exception as e:
+        except Exception:
             self.connection.rollback()
             return None
 
@@ -38,7 +38,7 @@ class Subscriptions:
             self.cursor.execute("DELETE FROM SeriesSubscriptions WHERE member_id = %s", (member_id,))
             self.connection.commit()
             return self.cursor.rowcount
-        except Exception as e:
+        except Exception:
             self.connection.rollback()
             return None
 
@@ -76,6 +76,6 @@ class Subscriptions:
             if self.cursor.fetchone():
                 return True
             return False
-        except Exception as e:
+        except Exception:
             self.connection.rollback()
             return None

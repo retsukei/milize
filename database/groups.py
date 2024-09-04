@@ -49,7 +49,7 @@ class Groups:
     @check_connection
     def get_by_name(self, group_name):
         try:
-            self.cursor.execute(f"SELECT group_id, group_name, discord, website, creator_id, created_at FROM groups WHERE group_name = %s", (group_name,))
+            self.cursor.execute("SELECT group_id, group_name, discord, website, creator_id, created_at FROM groups WHERE group_name = %s", (group_name,))
             self.connection.commit()
             return self.cursor.fetchone()
         except Exception as e:

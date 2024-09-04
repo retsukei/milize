@@ -73,14 +73,14 @@ class Series:
             return []
 
     @check_connection
-    def move(self, group_from_id, group_to_id):
+    def move(self, series_id, group_from_id, group_to_id):
         try:
             self.cursor.execute("UPDATE series SET group_id = %s WHERE group_id = %s", (group_to_id, group_from_id))
             self.connection.commit()
             return self.cursor.rowcount
         except Exception as e:
             self.connection.rollback()
-            print(f"Failed to move series '{series_name}' from group '{group_from_id}' to group '{group_to_id}': {e}")
+            print(f"Failed to move series with ID '{series_id}' from group '{group_from_id}' to group '{group_to_id}': {e}")
             return None
 
     @check_connection

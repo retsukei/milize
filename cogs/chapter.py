@@ -8,7 +8,7 @@ from natsort import natsorted
 from utils.embeds import info, error
 from utils.checks import check_authority
 from utils.constants import AuthorityLevel, StaffLevel
-from utils.autocompletes import get_group_list, get_series_list, get_added_jobs, get_unadded_jobs, get_chapter_list
+from utils.autocompletes import get_group_list, get_series_list, get_added_jobs, get_chapter_list
 from utils.views import JobboardView
 
 def setup(bot):
@@ -141,7 +141,7 @@ class Chapter(commands.Cog):
         await ctx.defer()
 
         if not ctx.guild:
-            return await ctx.respond(embed=error(f"Not allowed in DMs."))
+            return await ctx.respond(embed=error("Not allowed in DMs."))
 
         # Sanity checks
         series = ctx.bot.database.series.get(group_name, series_name)
@@ -229,7 +229,7 @@ class Chapter(commands.Cog):
         boardpost_id = ctx.bot.database.boardposts.new(str(message.id), chapter.chapter_id, series_job.series_job_id, min_level)
         if boardpost_id is None:
             await message.delete()
-            return await ctx.respond(embed=error(f"Failed to create a job board post."))
+            return await ctx.respond(embed=error("Failed to create a job board post."))
 
         await ctx.respond(embed=info(f"A post for `{job_name}` for chapter `{chapter_name}` has been made.\nThe post will be automatically deleted in **7 days** if not claimed.\nYou'll have to re-post it manually in that case."))
 

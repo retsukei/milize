@@ -33,16 +33,16 @@ class Group(commands.Cog):
         groups = ctx.bot.database.groups.get_all()
 
         output = []
-        for i, (_, group_name, discord, website, creator_id, created_at) in enumerate(groups, start=1):
-            creator = await ctx.bot.get_or_fetch_user(creator_id)
-            line = f"**{i}\\. {group_name}** by {creator.display_name}"
+        for i, group in enumerate(groups, start=1):
+            creator = await ctx.bot.get_or_fetch_user(group.creator_id)
+            line = f"**{i}\\. {group.group_name}** by {creator.display_name}"
 
-            if discord and website:
-                line += f"\n[Discord]({discord}) • [Website]({website})"
-            elif discord:
-                line += f"\n[Discord]({discord})"
-            elif website:
-                line += f"\n[Website]({website})"
+            if group.discord and group.website:
+                line += f"\n[Discord]({group.discord}) • [Website]({group.website})"
+            elif group.discord:
+                line += f"\n[Discord]({group.discord})"
+            elif group.website:
+                line += f"\n[Website]({group.website})"
 
             output.append(line)
 

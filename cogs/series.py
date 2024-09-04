@@ -50,7 +50,7 @@ class Series(commands.Cog):
 
         match = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
         if match is None:
-            return await ctx.respond(embed=error(f"Incorrect Google Drive folder URL."))
+            return await ctx.respond(embed=error("Incorrect Google Drive folder URL."))
 
         series_id = ctx.bot.database.series.new(group[0], series_name, drive_link, style_guide, mangadex, thumbnail)
         if not series_id:
@@ -137,7 +137,7 @@ class Series(commands.Cog):
         if rows and rows > 0:
             return await ctx.respond(embed=info(f"Series `{series_name}` has been moved to `{group_to.group_name}`."))
 
-        await ctx.respond(embed=info(f"Failed to update."))
+        await ctx.respond(embed=info("Failed to update."))
 
     @Series.command(description="Attaches job to a series.")
     @check_authority(AuthorityLevel.ProjectManager)
