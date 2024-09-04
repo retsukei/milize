@@ -29,7 +29,7 @@ class Series:
     def get(self, group_name, series_name):
         try:
             query = """
-                SELECT s.series_id, s.series_name, s.series_drive_link, s.style_guide, s.mangadex, g.group_id, g.group_name, s.thumbnail
+                SELECT s.series_id, s.series_name, s.series_drive_link, s.style_guide, s.mangadex, g.group_id, g.group_name, s.thumbnail, s.is_archived
                 FROM series s
                 JOIN groups g ON s.group_id = g.group_id
                 WHERE g.group_name = %s AND s.series_name = %s;
@@ -101,7 +101,7 @@ class Series:
                 SELECT s.series_id, s.series_name, s.series_drive_link, s.style_guide, s.mangadex, g.group_id
                 FROM series s
                 JOIN groups g ON s.group_id = g.group_id
-                WHERE g.group_name = %s;
+                WHERE g.group_name = %s AND s.is_archived = FALSE;
             """
             self.cursor.execute(query, (group_name,))
             return self.cursor.fetchall()
@@ -172,4 +172,15 @@ class Series:
         except Exception as e:
             self.connection.rollback()
             print(f"Failed to count chapters for series '{series_name}': {e}")
+            return None
+
+    @check_connection
+    def archive(self, series_id):
+        try:
+            self.cursor.execute("UPDATE series SET is_archived = TRUE WHERE series_id = %s", (series_id,))
+            self.connection.commit()
+            return self.cursor.rowcount
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to archive series with ID '{series_id}': {e}")
             return None

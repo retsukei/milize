@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS Series (
     style_guide VARCHAR(255),
     mangadex VARCHAR(255),
     thumbnail VARCHAR(255),
+    is_archived BOOLEAN DEFAULT FALSE,
     group_id INT REFERENCES Groups(group_id) ON DELETE CASCADE
 );
 

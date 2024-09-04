@@ -1,5 +1,7 @@
 import discord
 import re
+import os
+import requests
 from discord.ext import commands
 from discord.commands import SlashCommandGroup
 from utils.embeds import info, error
@@ -231,3 +233,32 @@ class Series(commands.Cog):
         else:
             await ctx.respond(embed=info(f"Successfully copied `{copied_jobs}` job(s) from `{source_series_name}` in group `{source_group_name}` to `{target_series_name}` in group `{target_group_name}`."))
         
+    @Series.command(description="Archives a series.")
+    @check_authority(AuthorityLevel.Owner)
+    async def archive(self,
+                      ctx,
+                      group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
+                      series_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_series_list))):
+        await ctx.defer()
+
+        series = ctx.bot.database.series.get(group_name, series_name)
+        if not series:
+            return await ctx.respond(embed=error(f"Failed to get series `{series_name}` from `{group_name}`."))
+
+        if series.is_archived:
+            return await ctx.respond(embed=error(f"Series `{series_name}` is already archived."))
+
+        rows = ctx.bot.database.series.archive(series.series_id)
+        if rows is None:
+            return await ctx.respond(embed=error(f"Failed to archive series `{series_name}`"))
+
+        # Move to .archive folder in GDrive
+        warning = ''
+        if series.series_drive_link:
+            match = re.search(r'/folders/([a-zA-Z0-9_-]+)', series.series_drive_link)
+            if match:
+                response = requests.get(f"{os.getenv('KeiretsuUrl')}/api/archive?id={match[1]}")
+                if response.status_code != 200:
+                    warning = '\n**Warning:** failed to move to `.archive(d)` folder in Google Drive.'
+
+        await ctx.respond(embed=info(f"Series `{series_name}` from `{group_name}` has been archived." + warning))

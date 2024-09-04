@@ -266,7 +266,7 @@ class Chapter(commands.Cog):
         ctx.bot.database.boardposts.delete(jobboard_post.boardpost_id)
         await ctx.respond(embed=info(f"The post for `{job_name}` for chapter `{chapter_name}` has been removed."))
 
-    @Chapter.command(description="Archives the chapter.")
+    @Chapter.command(description="Archives a chapter.")
     @check_authority(AuthorityLevel.ProjectManager)
     async def archive(self,
                       ctx,
@@ -286,4 +286,13 @@ class Chapter(commands.Cog):
         if rows is None:
             return await ctx.respond(embed=error(f"Failed to archive chapter `{chapter_name}` for series `{series_name}`"))
 
-        await ctx.respond(embed=info(f"Chapter `{chapter_name}` for series `{series_name}` has been archived."))
+        # Move to .archive folder in GDrive
+        warning = ''
+        if chapter.drive_link:
+            match = re.search(r'/folders/([a-zA-Z0-9_-]+)', chapter.drive_link)
+            if match:
+                response = requests.get(f"{os.getenv('KeiretsuUrl')}/api/archive?id={match[1]}")
+                if response.status_code != 200:
+                    warning = '\n**Warning:** failed to move to `.archive` folder in Google Drive.'
+
+        await ctx.respond(embed=info(f"Chapter `{chapter_name}` for series `{series_name}` has been archived." + warning))
