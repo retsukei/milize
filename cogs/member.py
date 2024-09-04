@@ -21,6 +21,14 @@ def format_time(hours):
     else:
         return f"{hours:.2f} hours"
 
+def format_as_days(hours):
+    if hours >= 24:
+        days = int(hours // 24)
+        plural = "" if days == 1 else "s"
+        return f"{days} day{plural}"
+    else:
+        return "<1 day"
+
 def setup(bot):
     bot.add_cog(Member(bot))
 
@@ -110,7 +118,7 @@ class Member(commands.Cog):
         embed.add_field(name="Qualified for", value=qualified_jobs_list, inline=False)
         embed.add_field(name="Authority Level", value=AuthorityLevel.to_string(member.authority_level), inline=False)
         embed.add_field(name="Total Completed", value=total_completed, inline=False)
-        embed.add_field(name="Total Time / Average", value=f"{format_time(total_hours)} / {format_time(average_time)}", inline=False)
+        embed.add_field(name="Total Time / Average", value=f"{format_time(total_hours)} / {format_as_days(average_time)}", inline=False)
         embed.add_field(name="Last Completed Job", value=f"{last_job_diff} day(s) ago", inline=False)
 
         embed.set_footer(text=f"Member since {member.created_at.strftime('%Y-%m-%d')}")

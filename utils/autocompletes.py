@@ -1,4 +1,5 @@
 import discord
+from natsort import natsorted
 
 async def get_group_list(ctx: discord.AutocompleteContext):
     groups = ctx.bot.database.groups.get_all()
@@ -20,7 +21,7 @@ async def get_chapter_list(ctx: discord.AutocompleteContext):
     chapters = ctx.bot.database.chapters.get_by_series_name(ctx.options['series_name'])
 
     if chapters:
-        return [chapter.chapter_name for chapter in chapters]
+        return natsorted([chapter.chapter_name for chapter in chapters])
 
     return []
 

@@ -448,7 +448,7 @@ class Jobs(commands.Cog):
         if series_jobs is None:
             return await ctx.respond(embed=error(f"Failed to get jobs for series `{series_name}`."))
 
-        embed = discord.Embed(title=f"Chapter {chapter[1]}", color=discord.Color.blue())
+        embed = discord.Embed(title=f"Chapter {chapter[1]}", url=chapter.drive_link, color=discord.Color.blue())
         embed.set_author(name=f"Jobs for {series_name} ({group_name})")
 
         for i, (series_job_id, job_id, job_name, _, _, _) in enumerate(series_jobs, start=1):
