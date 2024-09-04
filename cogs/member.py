@@ -356,6 +356,9 @@ class Member(commands.Cog):
                 pass
 
         async def role_select_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return
+
             nonlocal selected_role
             selected_role = role_select.values[0]
             embed.set_field_at(0, name="Admit as:", value=roles_mapping.get(selected_role) + " Staff", inline=False)
