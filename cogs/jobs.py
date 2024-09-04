@@ -254,6 +254,9 @@ class Jobs(commands.Cog):
         if chapter is None:
             return await ctx.respond(embed=error(f"Failed to get chapter `{chapter_name}` for series `{series_name}`."))
 
+        if chapter.is_archived:
+            return await ctx.respond(embed=error(f"Chapter `{chapter_name}` is archived. Cannot claim."))
+
         series_job = ctx.bot.database.jobs.get_added(series_name, job_name)
         if series_job is None:
             return await ctx.respond(embed=error(f"Failed to get job `{job_name}` for series `{series_name}`."))
@@ -308,6 +311,9 @@ class Jobs(commands.Cog):
         if chapter is None:
             return await ctx.respond(embed=error(f"Failed to get chapter `{chapter_name}` for series `{series_name}`."))
 
+        if chapter.is_archived:
+            return await ctx.respond(embed=error(f"Chapter `{chapter_name}` is archived. Cannot assign."))
+
         series_job = ctx.bot.database.jobs.get_added(series_name, job_name)
         if series_job is None:
             return await ctx.respond(embed=error(f"Failed to get job `{job_name}` for series `{series_name}`."))
@@ -353,6 +359,9 @@ class Jobs(commands.Cog):
         chapter = ctx.bot.database.chapters.get(series_name, chapter_name)
         if chapter is None:
             return await ctx.respond(embed=error(f"Failed to get chapter `{chapter_name}` for series `{series_name}`."))
+
+        if chapter.is_archived:
+            return await ctx.respond(embed=error(f"Chapter `{chapter_name}` is archived. Cannot assign."))
 
         series_job = ctx.bot.database.jobs.get_added(series_name, job_name)
         if series_job is None:

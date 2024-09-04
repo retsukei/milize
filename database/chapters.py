@@ -143,3 +143,14 @@ class Chapters:
             self.connection.rollback()
             print(f"Failed to archive chapter with ID `{chapter_id}`: {e}")
             return None
+
+    @check_connection
+    def archive_all(self, series_id):
+        try:
+            self.cursor.execute("UPDATE chapters SET is_archived = TRUE WHERE series_id = %s;", (series_id,))
+            self.connection.commit()
+            return self.cursor.rowcount
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to archive all chapters for series with ID `{series_id}`: {e}")
+            return None

@@ -152,6 +152,9 @@ class Chapter(commands.Cog):
         if not chapter:
             return await ctx.respond(embed=error(f"Failed to get chapter `{chapter_name}` for series `{series_name}`."))
 
+        if chapter.is_archived:
+            return await ctx.respond(embed=error(f"Chapter `{chapter_name}` is archived. Cannot post on job board."))
+
         series_job = ctx.bot.database.jobs.get_added(series_name, job_name)
         if not series_job:
             return await ctx.respond(embed=error(f"Failed to get job `{job_name}` for series `{series_name}`."))

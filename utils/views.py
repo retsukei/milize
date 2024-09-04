@@ -46,6 +46,9 @@ class JobboardView(discord.ui.View):
 
         channel = interaction.client.get_channel(int(os.getenv("MilizeChannelId")))
         if channel:
+            if chapter.is_archived:
+                return await channel.send(content=f"<@{member.id}>, chapter `{chapter.chapter_name}` for series `{series.series_name}` is archived. Cannot claim.")
+
             additional_info = []
 
             if chapter.drive_link:

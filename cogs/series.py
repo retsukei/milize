@@ -250,7 +250,11 @@ class Series(commands.Cog):
 
         rows = ctx.bot.database.series.archive(series.series_id)
         if rows is None:
-            return await ctx.respond(embed=error(f"Failed to archive series `{series_name}`"))
+            return await ctx.respond(embed=error(f"Failed to archive series `{series_name}`."))
+
+        rows = ctx.bot.database.chapters.archive_all(series.series_id)
+        if rows is None:
+            return await ctx.respond(embed=error(f"Failed to archive all chapters for series `{series_name}`."))
 
         # Move to .archive folder in GDrive
         warning = ''
