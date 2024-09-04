@@ -265,3 +265,25 @@ class Chapter(commands.Cog):
 
         ctx.bot.database.boardposts.delete(jobboard_post.boardpost_id)
         await ctx.respond(embed=info(f"The post for `{job_name}` for chapter `{chapter_name}` has been removed."))
+
+    @Chapter.command(description="Archives the chapter.")
+    @check_authority(AuthorityLevel.ProjectManager)
+    async def archive(self,
+                      ctx,
+                      group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
+                      series_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_series_list)),
+                      chapter_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_chapter_list))):
+        await ctx.defer()
+
+        chapter = ctx.bot.database.chapters.get(series_name, chapter_name)
+        if not chapter:
+            return await ctx.respond(embed=error(f"Not found chapter `{chapter_name}` for series `{series_name}`."))
+
+        if chapter.is_archived:
+            return await ctx.respond(embed=error(f"Chapter `{chapter_name}` for series `{series_name}` is already archived."))
+
+        rows = ctx.bot.database.chapters.archive(chapter.chapter_id)
+        if rows is None:
+            return await ctx.respond(embed=error(f"Failed to archive chapter `{chapter_name}` for series `{series_name}`"))
+
+        await ctx.respond(embed=info(f"Chapter `{chapter_name}` for series `{series_name}` has been archived."))

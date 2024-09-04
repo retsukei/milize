@@ -92,14 +92,16 @@ class Chapters:
     def get(self, series_name, chapter_name):
         try:
             query = """
-            SELECT c.chapter_id, c.chapter_name, c.drive_link, c.series_id
+            SELECT c.chapter_id, c.chapter_name, c.drive_link, c.series_id, c.is_archived
             FROM chapters c
             JOIN series s ON c.series_id = s.series_id
             WHERE s.series_name = %s AND c.chapter_name = %s;
             """
             self.cursor.execute(query, (series_name, chapter_name))
+            self.connection.commit()
             return self.cursor.fetchone()
         except Exception as e:
+            self.connection.rollback()
             print(f"Failed to get chapter '{chapter_name}' for series '{series_name}': {e}")
             return None
 
@@ -107,8 +109,10 @@ class Chapters:
     def get_by_id(self, chapter_id):
         try:
             self.cursor.execute("SELECT * FROM chapters WHERE chapter_id = %s", (chapter_id,))
+            self.connection.commit()
             return self.cursor.fetchone()
         except Exception as e:
+            self.connection.rollback()
             print(f"Failed to get chapter with ID '{chapter_id}': {e}")
             return None
 
@@ -116,13 +120,26 @@ class Chapters:
     def get_by_series_name(self, series_name):
         try:
             query = """
-            SELECT c.chapter_id, c.chapter_name, c.drive_link
+            SELECT c.chapter_id, c.chapter_name, c.drive_link, c.is_archived
             FROM Chapters c
             JOIN Series s ON c.series_id = s.series_id
-            WHERE s.series_name = %s;
+            WHERE s.series_name = %s AND c.is_archived = FALSE;
             """
             self.cursor.execute(query, (series_name,))
+            self.connection.commit()
             return self.cursor.fetchall()
         except Exception as e:
+            self.connection.rollback()
             print(f"Failed to list chapters for series '{series_name}': {e}")
             return []
+
+    @check_connection
+    def archive(self, chapter_id):
+        try:
+            self.cursor.execute("UPDATE chapters SET is_archived = TRUE WHERE chapter_id = %s;", (chapter_id,))
+            self.connection.commit()
+            return self.cursor.rowcount
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to archive chapter with ID `{chapter_id}`: {e}")
+            return None
