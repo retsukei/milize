@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS Chapters (
     chapter_name VARCHAR(100) NOT NULL,
     drive_link VARCHAR(255),
     series_id INT REFERENCES Series(series_id) ON DELETE CASCADE,
+    is_archived BOOLEAN DEFAULT FALSE,
     UNIQUE(series_id, chapter_name)
 );
 
