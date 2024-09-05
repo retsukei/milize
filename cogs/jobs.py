@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from discord.ext import commands
 from discord.commands import SlashCommandGroup
-from utils.embeds import info, error, warning
+from utils.embeds import info, error
 from utils.checks import check_authority
 from utils.constants import AuthorityLevel, JobStatus, JobType
 from utils.autocompletes import get_group_list, get_series_list, get_added_jobs, get_job_list, get_chapter_list
@@ -553,8 +553,8 @@ class Jobs(commands.Cog):
                 # Next stage notification
                 await notify_next_stage(ctx, series_name, chapter, series_job)
 
-                if not account:
-                    await ctx.send(embed=warning("The time between claiming and completing is too short. This job won't be counted towards your statistics."))
+                # if not account:
+                    # await ctx.send(embed=warning("The time between claiming and completing is too short. This job won't be counted towards your statistics."))
             return
 
         await ctx.respond(embed=error("Failed to update job."))
