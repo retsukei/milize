@@ -98,6 +98,12 @@ class Member(commands.Cog):
         qualified_jobs = ctx.bot.database.jobs.get_by_roles([str(role.id) for role in _user.roles])
         qualified_jobs_list = ", ".join(f"`{job}`" for job in qualified_jobs) if qualified_jobs else "None"
 
+        now = datetime.now(timezone.utc)
+        completed_at_dates = [convert_to_utc(a.completed_at) for a in all_assignments if a.completed_at]
+        last_job = max(completed_at_dates, default=None)
+        last_job_diff = (now - last_job).days if last_job else "N/A"
+        
+           
         embed = discord.Embed(
             title=f"{_user.display_name}'s profile",
             color=discord.Color.blue(),
@@ -106,6 +112,7 @@ class Member(commands.Cog):
         embed.add_field(name="Qualified for", value=qualified_jobs_list, inline=False)
         embed.add_field(name="Authority Level", value=AuthorityLevel.to_string(member.authority_level), inline=True)
         embed.add_field(name="Total Completed", value=total_completed, inline=True)
+        embed.add_field(name="Last Completed Job", value=f"{last_job_diff} day(s) ago", inline=False)
 
         embed.set_footer(text=f"Member since {member.created_at.strftime('%Y-%m-%d')}")
         embed.set_thumbnail(url=_user.avatar.url)
