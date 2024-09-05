@@ -76,6 +76,9 @@ class Member(commands.Cog):
                       user: discord.User = None):
         await ctx.defer()
 
+        if not ctx.guild:
+            return await ctx.respond(embed=error("Not allowed in DMs."))
+
         _user = ctx.author if user is None else user
         member_id = str(_user.id)
 
@@ -93,7 +96,7 @@ class Member(commands.Cog):
             if dt.tzinfo is None:
                 return dt.replace(tzinfo=timezone.utc)
             return dt.astimezone(timezone.utc)
-        
+
 
         qualified_jobs = ctx.bot.database.jobs.get_by_roles([str(role.id) for role in _user.roles])
         qualified_jobs_list = ", ".join(f"`{job}`" for job in qualified_jobs) if qualified_jobs else "None"
