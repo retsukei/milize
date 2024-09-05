@@ -266,3 +266,24 @@ class Series(commands.Cog):
                     warning = '\n**Warning:** failed to move to `.archive(d)` folder in Google Drive.'
 
         await ctx.respond(embed=info(f"Series `{series_name}` from `{group_name}` has been archived." + warning))
+
+    @Series.command(description="Archives a series.")
+    @check_authority(AuthorityLevel.Owner)
+    async def unarchive(self,
+                      ctx,
+                      group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
+                      series_name: str):
+        await ctx.defer()
+
+        series = ctx.bot.database.series.get(group_name, series_name)
+        if not series:
+            return await ctx.respond(embed=error(f"Failed to get series `{series_name}` from `{group_name}`."))
+
+        if not series.is_archived:
+            return await ctx.respond(embed=error(f"Series `{series_name}` is not archived."))
+
+        rows = ctx.bot.database.series.unarchive(series.series_id)
+        if rows is None:
+            return await ctx.respond(embed=error(f"Failed to unarchive series `{series_name}`."))
+
+        await ctx.respond(embed=info(f"Series `{series_name}` from `{group_name}` has been unarchived."))

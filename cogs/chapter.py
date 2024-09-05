@@ -298,4 +298,30 @@ class Chapter(commands.Cog):
                 if response.status_code != 200:
                     warning = '\n**Warning:** failed to move to `.archive` folder in Google Drive.'
 
+        # Archive assignments associated with the chapter.
+        ctx.bot.database.assignments.delete_for_chapter(chapter.chapter_id) 
+
         await ctx.respond(embed=info(f"Chapter `{chapter_name}` for series `{series_name}` has been archived." + warning))
+
+    @Chapter.command(description="Unarchives a chapter.")
+    async def unarchive(self,
+                        ctx,
+                        group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
+                        series_name: str,
+                        chapter_name: str):
+        await ctx.defer()
+
+        chapter = ctx.bot.database.chapters.get(series_name, chapter_name)
+        if not chapter:
+            return await ctx.respond(embed=error(f"Not found chapter `{chapter_name}` for series `{series_name}`."))
+
+        if not chapter.is_archived:
+            return await ctx.respond(embed=error(f"Chapter `{chapter_name}` for series `{series_name}` is not archived."))
+
+        rows = ctx.bot.database.chapters.unarchive(chapter.chapter_id)
+        if rows is None:
+            return await ctx.respond(embed=error(f"Failed to unarchive chapter `{chapter_name}` for series `{series_name}`."))
+
+        # Restore assignments
+        ctx.bot.database.assignments.restore_for_chapter(chapter.chapter_id)
+        await ctx.respond(embed=info(f"Chapter `{chapter_name}` for series `{series_name}` has been unarchived."))

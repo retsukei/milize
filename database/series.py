@@ -184,3 +184,14 @@ class Series:
             self.connection.rollback()
             print(f"Failed to archive series with ID '{series_id}': {e}")
             return None
+
+    @check_connection
+    def unarchive(self, series_id):
+        try:
+            self.cursor.execute("UPDATE series SET is_archived = FALSE WHERE series_id = %s", (series_id,))
+            self.connection.commit()
+            return self.cursor.rowcount
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to unarchive series with ID '{series_id}': {e}")
+            return None

@@ -107,6 +107,39 @@ class Assignments:
             return None
 
     @check_connection
+    def delete_for_chapter(self, chapter_id):
+        try:
+            self.cursor.execute("DELETE FROM jobsassignments WHERE chapter_id = %s", (chapter_id,))
+            self.connection.commit()
+            return self.cursor.rowcount
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to delete job assignments for chapter id '{chapter_id}': {e}")
+            return None
+
+    @check_connection
+    def restore_for_chapter(self, chapter_id):
+        try:
+            query = """
+            WITH moved AS (
+                DELETE FROM JobsAssignmentsArchive
+                WHERE chapter_id = %s
+                RETURNING *
+            )
+            INSERT INTO JobsAssignments (assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at, available_at, reminded_at, account)
+            SELECT assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at, available_at, reminded_at, account
+            FROM moved
+            ON CONFLICT (chapter_id, series_job_id) DO NOTHING;
+            """
+            self.cursor.execute(query, (chapter_id,))
+            self.connection.commit()
+            return self.cursor.rowcount
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to restore assignments for chapter with ID '{chapter_id}': {e}")
+            return None            
+
+    @check_connection
     def update_status(self, chapter_id, series_job_id, status, account):
         try:
             if status == JobStatus.Completed:

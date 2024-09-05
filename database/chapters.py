@@ -141,7 +141,18 @@ class Chapters:
             return self.cursor.rowcount
         except Exception as e:
             self.connection.rollback()
-            print(f"Failed to archive chapter with ID `{chapter_id}`: {e}")
+            print(f"Failed to archive chapter with ID '{chapter_id}': {e}")
+            return None
+
+    @check_connection
+    def unarchive(self, chapter_id):
+        try:
+            self.cursor.execute("UPDATE chapters SET is_archived = FALSE WHERE chapter_id = %s;", (chapter_id,))
+            self.connection.commit()
+            return self.cursor.rowcount
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to unarchive chapter with ID '{chapter_id}': {e}")
             return None
 
     @check_connection
