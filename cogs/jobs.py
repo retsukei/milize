@@ -263,7 +263,7 @@ class Jobs(commands.Cog):
 
         assignment = ctx.bot.database.assignments.get(chapter[0], series_job[0])
         if assignment:
-            user = await ctx.bot.get_or_fetch_user(assignment[3])
+            user = await ctx.bot.get_or_fetch_user(int(assignment[3]))
             return await ctx.respond(embed=error(f"Job `{job_name}` for chapter `{chapter_name}` is already claimed by <@{user.id}>"))
 
         is_first_job = ctx.bot.database.assignments.is_first(str(ctx.author.id))
@@ -320,7 +320,7 @@ class Jobs(commands.Cog):
 
         assignment = ctx.bot.database.assignments.get(chapter[0], series_job[0])
         if assignment:
-            assigned_user = await ctx.bot.get_or_fetch_user(assignment[3])
+            assigned_user = await ctx.bot.get_or_fetch_user(int(assignment[3]))
             return await ctx.respond(embed=error(f"Job `{job_name}` for chapter `{chapter_name}` is already assigned to <@{assigned_user.id}>.\nUse `/job reassign` to reassign."))
 
         user_id = str(user.id)
@@ -432,7 +432,7 @@ class Jobs(commands.Cog):
             return await ctx.respond(embed=error(f"Job `{job_name}` is not claimed by anyone."))
 
         if assignment.assigned_to != str(ctx.author.id): # who the hell stores discord ids as integers?
-            user = await ctx.bot.get_or_fetch_user(assignment.assigned_to)
+            user = await ctx.bot.get_or_fetch_user(int(assignment.assigned_to))
             return await ctx.respond(embed=error(f"Job `{job_name}` is claimed by <@{user.id}>. Cannot unclaim."))
 
         rows = ctx.bot.database.assignments.delete(chapter.chapter_id, series_job.series_job_id)
@@ -465,9 +465,10 @@ class Jobs(commands.Cog):
             assignment = ctx.bot.database.assignments.get(chapter.chapter_id, series_job_id)
 
             if assignment:
-                user = await ctx.bot.get_or_fetch_user(assignment.assigned_to)
+                user = await ctx.bot.get_or_fetch_user(int(assignment.assigned_to))
                 member = ctx.bot.database.members.get(assignment.assigned_to)
-                field = f"Assigned to: {user.display_name if member is None or member.credit_name is None else member.credit_name}\nStatus: {JobStatus.to_string(assignment.status)}"
+                display_name = "<unknown>" if not user else user.display_name
+                field = f"Assigned to: {display_name if member is None or member.credit_name is None else member.credit_name}\nStatus: {JobStatus.to_string(assignment.status)}"
             else:
                 field = "Assigned to: None\nStatus: Backlog"
 
@@ -513,7 +514,7 @@ class Jobs(commands.Cog):
 
         member = ctx.bot.database.members.get(str(ctx.author.id))
         if assignment.assigned_to != str(ctx.author.id) and member.authority_level < AuthorityLevel.ProjectManager:
-            user = await ctx.bot.get_or_fetch_user(assignment.assigned_to)
+            user = await ctx.bot.get_or_fetch_user(int(assignment.assigned_to))
             return await ctx.respond(embed=error(f"Job `{job_name}` is claimed by <@{user.id}>. Not allowed to update the status."))
 
         account = True
