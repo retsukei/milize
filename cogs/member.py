@@ -7,6 +7,7 @@ from utils.embeds import info, error, member_info
 from utils.checks import check_authority
 from utils.constants import AuthorityLevel, ReminderNotification
 from utils.autocompletes import get_group_list, get_series_list
+from datetime import timezone
 
 def format_time(hours):
     if hours >= 24:
@@ -67,6 +68,49 @@ class Member(commands.Cog):
             return await ctx.respond(embed=error(f"Failed to remove {user.mention} from the database."))
 
         await ctx.respond(embed=info(f"Removed {user.mention} from members."))
+
+    @Member.command(description="Shows member's profile.")
+    @check_authority(AuthorityLevel.Member)
+    async def profile(self,
+                      ctx,
+                      user: discord.User = None):
+        await ctx.defer()
+
+        _user = ctx.author if user is None else user
+        member_id = str(_user.id)
+
+        member = ctx.bot.database.members.get(member_id)
+        if member is None:
+            return await ctx.respond(embed=error(f"<@{_user.id}> is not added to members in Milize."))
+
+        assignments = ctx.bot.database.assignments.get_completed_by_user(member_id) or []
+        archived_assignments = ctx.bot.database.assignments.get_completed_by_user_archive(member_id) or []
+
+        all_assignments = assignments + archived_assignments
+        total_completed = len(all_assignments)
+
+        def convert_to_utc(dt):
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        
+
+        qualified_jobs = ctx.bot.database.jobs.get_by_roles([str(role.id) for role in _user.roles])
+        qualified_jobs_list = ", ".join(f"`{job}`" for job in qualified_jobs) if qualified_jobs else "None"
+
+        embed = discord.Embed(
+            title=f"{_user.display_name}'s profile",
+            color=discord.Color.blue(),
+            description=f"Credit name: `{member.credit_name if member.credit_name else _user.display_name}`"
+        )
+        embed.add_field(name="Qualified for", value=qualified_jobs_list, inline=False)
+        embed.add_field(name="Authority Level", value=AuthorityLevel.to_string(member.authority_level), inline=True)
+        embed.add_field(name="Total Completed", value=total_completed, inline=True)
+
+        embed.set_footer(text=f"Member since {member.created_at.strftime('%Y-%m-%d')}")
+        embed.set_thumbnail(url=_user.avatar.url)
+
+        await ctx.respond(embed=embed)
 
     @Member.command(description="Manage your notification preferences.")
     @check_authority(AuthorityLevel.Member)
