@@ -358,7 +358,7 @@ class Chapter(commands.Cog):
         for job in series_jobs:
             assignment = ctx.bot.database.assignments.get(chapter.chapter_id, job.series_job_id)
             if not assignment or assignment.status != JobStatus.Completed:
-                embed.description = f"**Chapter {chapter.chapter_name}:** Currently waiting for `{JobType.to_string(job.job_type)}` to be completed.\nWe apologize for any delays <:lenawhoops:1281740569546067978>"
+                embed.description = f"**Chapter {chapter.chapter_name}:** Currently waiting for `{JobType.to_string(job.job_type)}` to be completed.\nWe apologize for any delays {os.getenv('MilizeDownEmoji')}"
                 return await ctx.respond(embed=embed)
 
         await ctx.respond(embed=embed)
