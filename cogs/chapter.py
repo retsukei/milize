@@ -7,7 +7,7 @@ from discord.commands import SlashCommandGroup
 from natsort import natsorted
 from utils.embeds import info, error
 from utils.checks import check_authority
-from utils.constants import AuthorityLevel, StaffLevel
+from utils.constants import AuthorityLevel, StaffLevel, JobStatus, JobType
 from utils.autocompletes import get_group_list, get_series_list, get_added_jobs, get_chapter_list
 from utils.views import JobboardView
 
@@ -304,6 +304,7 @@ class Chapter(commands.Cog):
         await ctx.respond(embed=info(f"Chapter `{chapter_name}` for series `{series_name}` has been archived." + warning))
 
     @Chapter.command(description="Unarchives a chapter.")
+    @check_authority(AuthorityLevel.ProjectManager)
     async def unarchive(self,
                         ctx,
                         group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
@@ -331,3 +332,33 @@ class Chapter(commands.Cog):
         # Restore assignments
         ctx.bot.database.assignments.restore_for_chapter(chapter.chapter_id)
         await ctx.respond(embed=info(f"Chapter `{chapter_name}` for series `{series_name}` has been unarchived."))
+
+    @Chapter.command(description="Shows the progress of a chapter.")
+    async def progress(self,
+                       ctx,
+                       group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
+                       series_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_series_list)),
+                       chapter_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_chapter_list))):
+        await ctx.defer()
+
+        chapter = ctx.bot.database.chapters.get(series_name, chapter_name)
+        if not chapter:
+            return await ctx.respond(embed=error(f"Not found chapter `{chapter_name}` for series `{series_name}`."))
+
+        series_jobs = ctx.bot.database.jobs.get_added_all(series_name)
+        if series_jobs is None:
+            return await ctx.respond(embed=error(f"Failed to get jobs for series `{series_name}`."))
+
+        embed = discord.Embed(
+            color=discord.Color.blue(),
+            description=f"**Chapter {chapter.chapter_name}:** All jobs are completed!"
+        )
+        embed.set_author(name=f"{series_name} ({group_name})")
+
+        for job in series_jobs:
+            assignment = ctx.bot.database.assignments.get(chapter.chapter_id, job.series_job_id)
+            if not assignment or assignment.status != JobStatus.Completed:
+                embed.description = f"**Chapter {chapter.chapter_name}:** Currently waiting for `{JobType.to_string(job.job_type)}` to be completed."
+                return await ctx.respond(embed=embed)
+
+        await ctx.respond(embed=embed)

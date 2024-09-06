@@ -441,13 +441,17 @@ class Jobs(commands.Cog):
 
         return await ctx.respond(embed=error(f"Failed to unclaum job `{job_name}` for chapter `{chapter_name}`."))
 
-    @Jobs.command(description="Shows chapter's job data.")
+    @Jobs.command(description="Shows a chapter's job list.")
+    @check_authority(AuthorityLevel.Member)
     async def list(self,
                     ctx,
                     group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
                     series_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_series_list)),
                     chapter_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_chapter_list))):
         await ctx.defer()
+
+        if not ctx.guild or ctx.guild.id != int(os.getenv("StaffGuildId")):
+            return await ctx.respond(embed=error("This command is now deprecated. Please use `/chapter progress` to check the progress of a chapter."))
 
         chapter = ctx.bot.database.chapters.get(series_name, chapter_name)
         if chapter is None:
