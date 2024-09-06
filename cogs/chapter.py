@@ -322,6 +322,12 @@ class Chapter(commands.Cog):
         if rows is None:
             return await ctx.respond(embed=error(f"Failed to unarchive chapter `{chapter_name}` for series `{series_name}`."))
 
+        # Move to parent folder from archive.
+        if chapter.drive_link:
+            match = re.search(r'/folders/([a-zA-Z0-9_-]+)', chapter.drive_link)
+            if match:
+                requests.get(f"{os.getenv('KeiretsuUrl')}/api/unarchive?id={match[1]}")
+
         # Restore assignments
         ctx.bot.database.assignments.restore_for_chapter(chapter.chapter_id)
         await ctx.respond(embed=info(f"Chapter `{chapter_name}` for series `{series_name}` has been unarchived."))

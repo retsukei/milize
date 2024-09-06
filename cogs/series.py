@@ -286,4 +286,10 @@ class Series(commands.Cog):
         if rows is None:
             return await ctx.respond(embed=error(f"Failed to unarchive series `{series_name}`."))
 
+        # Move to parent folder from archive.
+        if series.series_drive_link:
+            match = re.search(r'/folders/([a-zA-Z0-9_-]+)', series.series_drive_link)
+            if match:
+                requests.get(f"{os.getenv('KeiretsuUrl')}/api/unarchive?id={match[1]}")
+
         await ctx.respond(embed=info(f"Series `{series_name}` from `{group_name}` has been unarchived."))
