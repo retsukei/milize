@@ -171,7 +171,6 @@ class Series:
                 query += " AND c.is_archived = FALSE"
 
             self.cursor.execute(query, (series_name,))
-            self.connection.commit()
             return self.cursor.fetchone().chapter_count
         except Exception as e:
             self.connection.rollback()
