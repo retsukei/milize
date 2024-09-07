@@ -51,9 +51,9 @@ class Chapter(commands.Cog):
                                 matches = True
 
                             if not matches and chapter_name_match:
-                                item_match = re.search(r'\d+', item['name'])
+                                item_match = re.search(r'\d+(\.\d+)?', item['name'])
                                 if item_match:
-                                    matches = int(re.search(r'\d+', chapter_name)[0]) == int(re.search(r'\d+', item['name'])[0])
+                                    matches = float(re.search(r'\d+(\.\d+)?', chapter_name)[0]) == float(re.search(r'\d+(\.\d+)?', item['name'])[0])
 
                             if matches:
                                 chapter_drive_link = f"https://drive.google.com/drive/folders/{item['id']}"

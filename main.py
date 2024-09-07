@@ -51,6 +51,8 @@ def should_notify(series_name, chapter, series_job):
             assignment = bot.database.assignments.get(chapter.chapter_id, sfx_type[0].series_job_id)
             if not assignment or assignment.status != utils.constants.JobStatus.Completed:
                 notify = False
+
+        return notify
     elif series_job.job_type == utils.constants.JobType.Proofreading:
         # Check if tl done.
         tl_type = bot.database.jobs.get_added_by_type(series_name, utils.constants.JobType.Translation)
@@ -94,7 +96,7 @@ async def milize_main_task():
                             series = bot.database.series.get_by_id(chapter.series_id)
                             series_job = bot.database.jobs.get_added_by_id(assignment.series_job_id)
                             if should_notify(series.series_name, chapter, series_job):
-                                await channel.send(f"<@{member.discord_id}>, you have unfinished task for chapter `{chapter.chapter_name}` in series `{series.series_name}`.")
+                                await channel.send(f"<@{member.discord_id}>, you have unfinished task(s) for chapter `{chapter.chapter_name}` in series `{series.series_name}`.")
 
                         bot.database.assignments.update_reminder(assignment.assignment_id)
 
