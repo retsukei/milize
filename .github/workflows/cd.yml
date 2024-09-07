@@ -18,6 +18,7 @@ jobs:
         port: 22
         script: |
           cd ~/milize
+          git reset --hard
           git pull origin main
           git status
           pip install -r requirements.txt --quiet
