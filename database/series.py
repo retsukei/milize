@@ -158,14 +158,18 @@ class Series:
         return 0
 
     @check_connection
-    def count_chapters(self, series_name):
+    def count_chapters(self, series_name, count_archived = False):
         try:
             query = """
             SELECT COUNT(*) AS chapter_count
             FROM chapters c
             JOIN series s ON c.series_id = s.series_id
-            WHERE s.series_name = %s;
+            WHERE s.series_name = %s
             """
+
+            if not count_archived:
+                query += " AND c.is_archived = FALSE"
+
             self.cursor.execute(query, (series_name,))
             self.connection.commit()
             return self.cursor.fetchone().chapter_count

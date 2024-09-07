@@ -31,7 +31,7 @@ class Chapter(commands.Cog):
 
         chapter_count = ctx.bot.database.series.count_chapters(series_name)
         if chapter_count and chapter_count >= 25:
-            return await ctx.respond(embed=error("Reached the limit of chapters per series. Remove some before adding more."))
+            return await ctx.respond(embed=error("Reached the limit of chapters per series. Remove (or archive) some before adding more."))
 
         chapter_drive_link = None
         series = ctx.bot.database.series.get(group_name, series_name)
