@@ -117,7 +117,8 @@ CREATE TABLE IF NOT EXISTS JobsAssignmentsArchive (
     available_at TIMESTAMPTZ,
     reminded_at TIMESTAMPTZ,
     account BOOLEAN DEFAULT TRUE,
-    archived_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    archived_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(chapter_id, series_job_id, assigned_to)
 );
 
 CREATE OR REPLACE FUNCTION archive_jobs_assignments() RETURNS TRIGGER AS $$
@@ -126,7 +127,14 @@ BEGIN
     (assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at, reminded_at, available_at, account)
     VALUES
     (OLD.assignment_id, OLD.chapter_id, OLD.series_job_id, OLD.assigned_to, OLD.status, OLD.created_at, OLD.completed_at, OLD.reminded_at, OLD.available_at, OLD.account)
-    ON CONFLICT(assignment_id) DO NOTHING;
+    ON CONFLICT(chapter_id, series_job_id, assigned_to)
+    DO UPDATE SET
+        status = EXCLUDED.status,
+        created_at = EXCLUDED.created_at,
+        completed_at = EXCLUDED.completed_at,
+        reminded_at = EXCLUDED.reminded_at,
+        available_at = EXCLUDED.available_at,
+        account = EXCLUDED.account;
 
     RETURN OLD;
 END;
@@ -146,4 +154,3 @@ BEGIN
     END IF;
 END;
 $$ LANGUAGE plpgsql;
-
