@@ -189,7 +189,7 @@ class Jobs:
             return self.cursor.fetchone()
         except Exception as e:
             self.connection.rollback()
-            print(f"Failed to list attached jobs for series '{series_name}': {e}")
+            print(f"Failed to get attached jobs for series '{series_name}': {e}")
             return []
 
     @check_connection

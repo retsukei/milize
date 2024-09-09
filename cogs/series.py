@@ -293,3 +293,101 @@ class Series(commands.Cog):
                 requests.get(f"{os.getenv('KeiretsuUrl')}/api/unarchive?id={match[1]}")
 
         await ctx.respond(embed=info(f"Series `{series_name}` from `{group_name}` has been unarchived."))
+
+    @Series.command(description="Assigns staff at the series level.")
+    @check_authority(AuthorityLevel.Owner)
+    async def assign(self,
+                     ctx,
+                     group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
+                     series_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_series_list)),
+                     job_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_added_jobs)),
+                     user: discord.User):
+        await ctx.defer()
+
+        user_id = str(user.id)
+        member = ctx.bot.database.members.get(user_id)
+        if not member:
+            return await ctx.respond(embed=error(f"{user.mention} is not added to members in Milize."))
+
+        series = ctx.bot.database.series.get(group_name, series_name)
+        if not series:
+            return await ctx.respond(embed=error(f"Failed to get series `{series_name}` for `{group_name}`."))
+
+        series_job = ctx.bot.database.jobs.get_added(series_name, job_name)
+        if not series_job:
+            return await ctx.respond(embed=error(f"Failed to get job `{job_name}` for series `{series_name}`."))
+
+        assignment = ctx.bot.database.series.get_assignment(series.series_id, series_job.series_job_id)
+        if assignment:
+            return await ctx.respond(embed=error(f"Job is already assigned to <@{assignment.assigned_to}>. Cannot assign."))
+
+        assignment_id = ctx.bot.database.series.add_assignment(series.series_id, series_job.series_job_id, user_id)
+        if assignment_id is None:
+            return await ctx.respond(embed=error(f"Failed to assign {user.mention} to job `{job_name}` for series `{series_name}`."))
+
+        await ctx.respond(embed=info(f"{user.mention} has been assigned to `{job_name}` for series `{series_name}` as consistent staff.\nNewly created chapters will have them automatically added."))
+
+    @Series.command(description="Unassigns staff at the series level.")
+    @check_authority(AuthorityLevel.Owner)
+    async def unassign(self,
+                     ctx,
+                     group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
+                     series_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_series_list)),
+                     job_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_added_jobs))):
+        await ctx.defer()
+
+        series = ctx.bot.database.series.get(group_name, series_name)
+        if not series:
+            return await ctx.respond(embed=error(f"Failed to get series `{series_name}` for `{group_name}`."))
+
+        series_job = ctx.bot.database.jobs.get_added(series_name, job_name)
+        if not series_job:
+            return await ctx.respond(embed=error(f"Failed to get job `{job_name}` for series `{series_name}`."))
+
+        assignment = ctx.bot.database.series.get_assignment(series.series_id, series_job.series_job_id)
+        if not assignment:
+            return await ctx.respond(embed=error(f"Job `{job_name}` for series `{series_name}` is not assigned to anyone."))
+
+        assignment_id = ctx.bot.database.series.remove_assignment(series.series_id, series_job.series_job_id)
+        if assignment_id is None:
+            return await ctx.respond(embed=error(f"Failed to remove assignment for job `{job_name}` for series `{series_name}`."))
+
+        await ctx.respond(embed=info(f"Assignment for job `{job_name}` for series `{series_name}` has been removed."))
+
+    @Series.command(description="Lists all roles at the series level.")
+    @check_authority(AuthorityLevel.Member)
+    async def assignments(self,
+                          ctx,
+                          group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
+                          series_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_series_list))):
+        await ctx.defer()
+
+        if not ctx.guild or ctx.guild.id != int(os.getenv("StaffGuildId")):
+            return await ctx.respond(embed=error("This command is now deprecated. Please use `/chapter progress` to check the progress of a chapter."))
+
+        series = ctx.bot.database.series.get(group_name, series_name)
+        if series is None:
+            return await ctx.respond(embed=error(f"Failed to get series `{series_name}` for group `{group_name}`."))
+
+        series_jobs = ctx.bot.database.jobs.get_added_all(series_name)
+        if series_jobs is None:
+            return await ctx.respond(embed=error(f"Failed to get jobs for series `{series_name}`."))
+
+        embed = discord.Embed(title="Consistent staff", url=series.series_drive_link, color=discord.Color.blue())
+        embed.set_author(name=f"Jobs for {series_name} ({group_name})")
+
+        for i, (series_job_id, job_id, job_name, _, _, _) in enumerate(series_jobs, start=1):
+            field = ''
+            assignment = ctx.bot.database.series.get_assignment(series.series_id, series_job_id)
+
+            if assignment:
+                user = await ctx.bot.get_or_fetch_user(int(assignment.assigned_to))
+                member = ctx.bot.database.members.get(assignment.assigned_to)
+                display_name = "<unknown>" if not user else user.display_name
+                field = f"Assigned to: {display_name if member is None or member.credit_name is None else member.credit_name}"
+            else:
+                field = "Assigned to: None"
+
+            embed.add_field(name=job_name, value=field, inline=False)
+
+        await ctx.respond(embed=embed)

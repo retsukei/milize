@@ -62,6 +62,14 @@ class Chapter(commands.Cog):
         if chapter_id is None:
             return await ctx.respond(embed=error(f"Chapter `{chapter_name}` for series `{series_name}` is already in the database (or errored while adding.)"))
 
+        # Add series-based assignments.
+        series_assignments = ctx.bot.database.series.get_assignments(series.series_id)
+        if series_assignments:
+            for assignment in series_assignments:
+                assignment_id = ctx.bot.database.assignments.new(chapter_id, assignment.series_job_id, assignment.assigned_to)
+                if assignment_id is None:
+                    return await ctx.respond(embed=error("Failed to add series-based assignments for this chapter."))
+
         warning_message = "\n**Warning:** could not find chapter in Google Drive." if chapter_drive_link is None else ""
         await ctx.respond(embed=info(f"Chapter `{chapter_name}` for series `{series_name}` has been added." + warning_message))
 

@@ -71,6 +71,16 @@ CREATE TABLE IF NOT EXISTS JobsAssignments (
     UNIQUE(chapter_id, series_job_id)
 );
 
+-- Create Series Assignments Table
+CREATE TABLE IF NOT EXISTS SeriesAssignments (
+    series_assignment_id SERIAL PRIMARY KEY,
+    series_id INT REFERENCES Series(series_id) ON DELETE CASCADE,
+    series_job_id INT REFERENCES SeriesJobs(series_job_id) ON DELETE CASCADE,
+    assigned_to VARCHAR(100) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(series_id, series_job_id)
+);
+
 -- Create Members Table
 CREATE TABLE IF NOT EXISTS Members (
     member_id SERIAL PRIMARY KEY,
