@@ -178,6 +178,53 @@ class Series:
             return None
 
     @check_connection
+    def get_assignment(self, series_id, series_job_id):
+        try:
+            self.cursor.execute("SELECT * FROM seriesassignments WHERE series_id = %s AND series_job_id = %s", (series_id, series_job_id))
+            return self.cursor.fetchone()
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to get assignment for series '{series_id}': {e}")
+            return None
+
+    @check_connection
+    def get_assignments(self, series_id):
+        try:
+            self.cursor.execute("SELECT * FROM seriesassignments WHERE series_id = %s", (series_id,))
+            return self.cursor.fetchall()
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to get assignment for series '{series_id}': {e}")
+            return None
+
+    @check_connection
+    def add_assignment(self, series_id, series_job_id, user_id):
+        try:
+            self.cursor.execute("INSERT INTO seriesassignments (series_id, series_job_id, assigned_to) VALUES (%s, %s, %s) ON CONFLICT(series_id, series_job_id) DO NOTHING RETURNING series_assignment_id;", (series_id, series_job_id, user_id))
+            self.connection.commit()
+            assignment_id = self.cursor.fetchone()
+
+            if assignment_id:
+                return assignment_id[0]
+
+            return None
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to add assignment for series '{series_id}': {e}")
+            return None
+
+    @check_connection
+    def remove_assignment(self, series_id, series_job_id):
+        try:
+            self.cursor.execute("DELETE FROM seriesassignments WHERE series_id = %s AND series_job_id = %s", (series_id, series_job_id))
+            self.connection.commit()
+            return self.cursor.rowcount
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to remove assignment for series '{series_id}': {e}")
+            return None
+
+    @check_connection
     def archive(self, series_id):
         try:
             self.cursor.execute("UPDATE series SET is_archived = TRUE WHERE series_id = %s", (series_id,))
