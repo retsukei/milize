@@ -33,6 +33,16 @@ class Members:
             return None
 
     @check_connection
+    def get_all(self):
+        try:
+            self.cursor.execute("SELECT * FROM members")
+            return self.cursor.fetchall()
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to get all members: {e}")
+            return None
+
+    @check_connection
     def delete(self, user_id):
         try:
             self.cursor.execute("DELETE FROM members WHERE discord_id = %s", (user_id,))
@@ -119,4 +129,72 @@ class Members:
             self.connection.rollback()
             print(f"Failed to get authority level for '{user_id}': {e}")
             return None
+
+    @check_connection
+    def get_retired(self, user_id):
+        try:
+            self.cursor.execute("SELECT * FROM membersretired WHERE discord_id = %s", (user_id,))
+            return self.cursor.fetchone()
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to get retired member '{user_id}': {e}")
         
+    @check_connection
+    def move_to_retired(self, member_id, roles):
+        try:
+            self.cursor.execute("SELECT * FROM members WHERE member_id = %s", (member_id,))
+            member = self.cursor.fetchone()
+
+            if member:
+                self.cursor.execute("""
+                    INSERT INTO MembersRetired (member_id, discord_id, credit_name, authority_level, roles, reminder_notifications, jobboard_notifications, stage_notifications, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (member_id) DO NOTHING;
+                """, (member.member_id, member.discord_id, member.credit_name, member.authority_level, roles, member.reminder_notifications, member.jobboard_notifications, member.stage_notifications, member.created_at))
+                self.cursor.execute("DELETE FROM members WHERE member_id = %s;", (member_id,))
+                self.connection.commit()
+
+                print(f"Member with ID {member_id} has been moved to MembersRetired.")
+            else:
+                print(f"Member with ID {member_id} does not exist in Members.")
+
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to move member to retired: {e}")
+
+    @check_connection
+    def restore_from_retired(self, member_id):
+        try:
+            # Fetch the member from the MembersRetired table
+            self.cursor.execute("SELECT * FROM MembersRetired WHERE member_id = %s", (member_id,))
+            retired_member = self.cursor.fetchone()
+
+            if retired_member:
+                # Insert back into Members table
+                self.cursor.execute("""
+                    INSERT INTO members (member_id, discord_id, credit_name, authority_level, reminder_notifications, jobboard_notifications, stage_notifications, created_at, reminded_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    ON CONFLICT (member_id) DO NOTHING;
+                """, (retired_member.member_id, retired_member.discord_id, retired_member.credit_name, retired_member.authority_level, retired_member.reminder_notifications, retired_member.jobboard_notifications, retired_member.stage_notifications, retired_member.created_at))
+                
+                # Remove the member from MembersRetired
+                self.cursor.execute("DELETE FROM MembersRetired WHERE member_id = %s;", (member_id,))
+                self.connection.commit()
+
+                print(f"Member with ID {member_id} has been restored to Members and removed from MembersRetired.")
+            else:
+                print(f"Member with ID {member_id} does not exist in MembersRetired.")
+
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to restore member from retired: {e}")
+
+    @check_connection
+    def update_activity(self, user_id):
+        try:
+            self.cursor.execute("UPDATE members SET reminded_at = NULL WHERE discord_id = %s", (user_id,))
+            self.connection.commit()
+            return self.cursor.rowcount
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to update activity for '{user_id}': {e}")
+            return None

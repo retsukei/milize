@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from discord.ext import commands
 from discord.commands import SlashCommandGroup
+from discord.ext.pages import Paginator
 from utils.embeds import info, error
 from utils.checks import check_authority
 from utils.constants import AuthorityLevel, JobStatus, JobType
@@ -296,6 +297,8 @@ class Jobs(commands.Cog):
         if is_first_job:
             await ctx.send(embed=info("Since this is your first job, please consider checking if there's any important material to read (like a style guide). Usually, it's available in the pinned messages for the channel of the series."))
 
+        ctx.bot.database.members.update_activity(str(ctx.author.id))
+
     @Jobs.command(description="Assigns a job to a member.")
     @check_authority(AuthorityLevel.ProjectManager) 
     async def assign(self,
@@ -345,6 +348,8 @@ class Jobs(commands.Cog):
 
         await ctx.respond(embed=info(f"Job `{job_name}` has been assigned to <@{user.id}> for chapter `{chapter_name}`."))
 
+        ctx.bot.database.members.update_activity((user.id))
+
     @Jobs.command(description="Assigns a job to a member.")
     @check_authority(AuthorityLevel.ProjectManager) 
     async def reassign(self,
@@ -381,6 +386,8 @@ class Jobs(commands.Cog):
             return await ctx.respond(embed=info(f"Job `{job_name}` has been assigned to <@{user.id}> for chapter `{chapter_name}`."))
 
         await ctx.respond(embed=error("No updates were made."))
+
+        ctx.bot.database.members.update_activity(str(user.id))
 
     @Jobs.command(description="Unassigns the job of a chapter.")
     @check_authority(AuthorityLevel.ProjectManager)
@@ -493,6 +500,47 @@ class Jobs(commands.Cog):
 
         await ctx.respond(embed=info("\n".join(output), title="All jobs in Milize"))
 
+    @Jobs.command(description="Shows all assignments to yet be done.")
+    @check_authority(AuthorityLevel.Member)
+    async def todo(self, ctx, user: discord.User = None):
+        await ctx.defer()
+
+        _user = ctx.author if user is None else user
+        user_id = str(ctx.author.id) if user is None else str(user.id)
+        assignments = ctx.bot.database.assignments.get_todo(user_id)
+
+        if not assignments:
+            return await ctx.respond(embed=error(f"{_user.mention} does not have any assignments to do."))
+
+        page_size = 5
+        total_pages = (len(assignments) + page_size - 1) // page_size
+
+        pages = []
+        genitive = "'" if _user.display_name.endswith("s") else "'s"
+        for page_num in range(total_pages):
+            embed = discord.Embed(title=f"{_user.display_name}{genitive} To-Do List", color=discord.Color.blue())
+            embed.set_thumbnail(url=_user.display_avatar.url)
+
+            start_index = page_num * page_size
+            end_index = start_index + page_size
+
+            for assignment in assignments[start_index:end_index]:
+                embed.add_field(
+                    name=f"{assignment.group_name}",
+                    value=f"**{assignment.series_name}** ch. {assignment.chapter_name} — `{assignment.job_name}` • {JobStatus.to_string(assignment.status)}",
+                    inline=False
+                )
+
+            pages.append(embed)
+
+        if len(pages) < 2:
+            return await ctx.respond(embed=pages[0])
+
+        paginator = Paginator(pages)
+        paginator.buttons['prev']['object'].style = discord.ButtonStyle.primary
+        paginator.buttons['next']['object'].style = discord.ButtonStyle.primary
+        await paginator.respond(ctx.interaction, ephemeral=False)
+
     @Jobs.command(description="Updates status of a job.")
     @check_authority(AuthorityLevel.Member)
     async def update(self,
@@ -501,7 +549,8 @@ class Jobs(commands.Cog):
                      series_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_series_list)),
                      chapter_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_chapter_list)),
                      job_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_added_jobs)),
-                     status: discord.Option(int, choices=JobStatus.to_choices())):
+                     status: discord.Option(int, choices=JobStatus.to_choices()),
+                     silent: discord.Option(bool) = False):
         await ctx.defer()
 
         chapter = ctx.bot.database.chapters.get(series_name, chapter_name)
@@ -532,6 +581,9 @@ class Jobs(commands.Cog):
                 line += f"\nThank you for your work! {os.getenv('MilizeSaluteEmoji')}"
             await ctx.respond(embed=info(line))
 
+            if silent:
+                return
+
             if status == JobStatus.Completed:
                 # Trial / Probationary notif
                 if assignment.assigned_to == str(ctx.author.id):
@@ -553,7 +605,7 @@ class Jobs(commands.Cog):
                                                 f"chapter `{chapter_name}` for series `{series_name}`."),
                                 color=discord.Color.yellow()
                             )
-                        await lead_notification_channel.send(embed=embed)
+                            await lead_notification_channel.send(embed=embed)
 
                 # Next stage notification
                 await notify_next_stage(ctx, series_name, chapter, series_job)

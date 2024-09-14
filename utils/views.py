@@ -62,3 +62,5 @@ class JobboardView(discord.ui.View):
 
             if is_first_job:
                 await channel.send(embed=info("Since this is your first job, please consider checking if there's any important material to read (like a style guide). Usually, it's available in the pinned messages for the channel of the series."))
+
+            interaction.client.database.members.update_activity(str(member.id))

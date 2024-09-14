@@ -82,6 +82,9 @@ class Chapter(commands.Cog):
                      chapter_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_chapter_list))):
         await ctx.defer()
 
+        if str(ctx.author.id) != os.getenv("DiscordDevId"):
+            return await ctx.respond(embed=error(f"Use the `/chapter archive` command to archive a completed chapter.\nIf you need to delete a chapter, ping <@{os.getenv('DiscordDevId')}>"))
+
         rows = ctx.bot.database.chapters.delete(series_name, chapter_name)
         if rows and rows > 0:
             return await ctx.respond(embed=info(f"Chapter `{chapter_name}` for series `{series_name}` has been deleted."))

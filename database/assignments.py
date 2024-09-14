@@ -203,3 +203,38 @@ class Assignments:
             self.connection.rollback()
             print(f"Failed to update reminder for assignment '{assignment_id}': {e}")
             return None
+            
+    @check_connection
+    def get_todo(self, user_id):
+        try:
+            query = """
+            SELECT 
+                g.group_name,
+                s.series_name,
+                c.chapter_name,
+                j.job_name,
+                ja.status,
+                ja.created_at,
+                ja.completed_at
+            FROM 
+                JobsAssignments ja
+            JOIN 
+                SeriesJobs sj ON ja.series_job_id = sj.series_job_id
+            JOIN 
+                Jobs j ON sj.job_id = j.job_id
+            JOIN 
+                Chapters c ON ja.chapter_id = c.chapter_id
+            JOIN 
+                Series s ON c.series_id = s.series_id
+            JOIN 
+                Groups g ON s.group_id = g.group_id
+            WHERE 
+                ja.assigned_to = %s
+                AND ja.status != 2;
+            """
+            self.cursor.execute(query, (user_id,))
+            return self.cursor.fetchall()
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to get todo list for user '{user_id}': {e}")
+            return None

@@ -282,6 +282,51 @@ class Member(commands.Cog):
 
         await ctx.respond(embed=error(f"Failed to update authority level for <@{user.id}>"))
 
+    @Member.command(description="Restores member from retired staff.")
+    async def restore(self, ctx):
+        await ctx.defer()
+
+        member = ctx.bot.database.members.get_retired(str(ctx.author.id))
+        if not member:
+            return await ctx.respond(embed=error(f"Could not find {ctx.author.mention} in retired staff. Cannot restore."))
+
+        guild = ctx.bot.get_guild(int(os.getenv("StaffGuildId")))
+        try:
+            user = await guild.fetch_member(int(member.discord_id))
+            if user:
+                await user.remove_roles(*user.roles[1:], reason="Member restore. Moving to active staff.")
+                
+                for role_id in member.roles:
+                    role = guild.get_role(int(role_id))
+                    if role:
+                        await user.add_roles(role, reason="Member restore. Moving to active staff.")
+
+                ctx.bot.database.members.restore_from_retired(member.member_id)
+                inactivity_channel = ctx.bot.get_channel(int(os.getenv("InactivityChannelId")))
+                if inactivity_channel:
+                    role_mappings = {
+                        os.getenv('StaffFullRoleId'): "full",
+                        os.getenv('StaffProbationaryRoleId'): "probationary",
+                        os.getenv('StaffTrialRoleId'): "trial",
+                    }
+
+                    role_name = next((role_mappings[role] for role in member.roles if role in role_mappings), None)
+
+                    embed = discord.Embed(
+                        title="Inactivity Notification",
+                        description=(f"✅ Moved {role_name} staff {user.mention} from retired to active (they used `/member restore` command)."),
+                        color=discord.Color.yellow()
+                    )
+                    await inactivity_channel.send(embed=embed)
+
+                if any(role == os.getenv("StaffProbationaryRoleId") for role in member.roles):
+                    await ctx.respond(embed=info("Your roles have been restored. You'll be removed from staff in `3 days` from now unless you claim a job. Welcome back!"))
+                else:
+                    await ctx.respond(embed=info("Your roles have been restored. You'll be moved back to inactive in `24 hours` from now unless you claim a job. Welcome back!"))
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+            print(e)
+            await ctx.respond(embed=error("Could not restore due to internal error."))
+
     @Member.command(description="Admits user to the staff.")
     @check_authority(AuthorityLevel.Owner)
     async def admit(self, ctx, user: discord.User):

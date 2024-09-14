@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from discord.ext import tasks
 import dotenv
 import os
+import textwrap
 
 from database import DatabaseManager
 import utils
@@ -117,6 +118,133 @@ async def milize_main_task():
             except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                 pass
 
+@tasks.loop(hours=1)
+async def inactivity_task():
+    now = datetime.now(timezone.utc)
+
+    group_lead_id = int(os.getenv("StaffGroupLeadRoleId"))
+    dep_lead_id = int(os.getenv("StaffDepLeadRoleId"))
+
+    full_staff_id = int(os.getenv("StaffFullRoleId"))
+    probationary_staff_id = int(os.getenv("StaffProbationaryRoleId"))
+    trial_staff_id = int(os.getenv("StaffTrialRoleId"))
+
+    members = bot.database.members.get_all()
+
+    for member in members:
+        assignments = bot.database.assignments.get_by_user(member.discord_id)
+        archived_assignments = bot.database.assignments.get_by_user_archive(member.discord_id)
+
+        all_assignments = assignments + archived_assignments
+
+        active_assignments = [a for a in assignments if a.status < 2]
+        if active_assignments:
+            continue
+
+        last_completed_at = max(
+            (a.completed_at for a in all_assignments if a.completed_at), default=None
+        )
+
+        if not last_completed_at:
+            last_completed_at = member.created_at
+
+        time_inactive = (now - last_completed_at).days
+        if time_inactive < 30 or member.reminded_at and (now - member.reminded_at).days < 1:
+            continue
+
+        guild = bot.get_guild(int(os.getenv("StaffGuildId")))
+        try:
+            user = await guild.fetch_member(int(member.discord_id))
+            if user:
+                user_roles = [role.id for role in user.roles]
+                if group_lead_id in user_roles or dep_lead_id in user_roles:
+                    continue
+
+                if full_staff_id in user_roles and time_inactive >= 90:
+                    if member.reminded_at and (now - member.reminded_at).days < 7:
+                        continue
+
+                    bot.database.members.move_to_retired(member.member_id, [str(role.id) for role in user.roles if role.id != guild.id])
+                    await user.remove_roles(*user.roles[1:], reason="Inactivity. Moved to retired staff.")
+                    
+                    role = guild.get_role(int(os.getenv("StaffRetiredRoleId")))
+                    if role:
+                        await user.add_roles(role, reason="Inactivity. Moved to retired staff.")
+
+                    inactivity_channel = bot.get_channel(int(os.getenv("InactivityChannelId")))
+                    if inactivity_channel:
+                        embed = discord.Embed(
+                            title="Inactivity Notification",
+                            description=(f"❌ Moved full staff {user.mention} to retired due to inactivity."),
+                            color=discord.Color.yellow()
+                        )
+                        await inactivity_channel.send(embed=embed)
+
+                    message = """
+                    Hello! In case you've forgotten, I am the bot that manages `Keiretsu`.
+
+                    Due to your inactivity over the past 3 months, you have been moved from the `full staff` category to `retired`. All your roles were automatically removed. This is a necessary step to accurately track our active staff members.
+
+                    If you'd like to start working again or believe this was done in error, feel free to use the `/member restore` command. Your roles will be reinstated, but they will be removed again in `7 days` unless you claim a job.
+                    """
+                    await user.send(textwrap.dedent(message))
+                elif probationary_staff_id in user_roles and time_inactive >= 30:
+                    if member.reminded_at and (now - member.reminded_at).days >= 7:
+                        # Remove all roles. Delete from members.
+                        await user.remove_roles(*user.roles[1:], reason="Inactivity. Removed from probationary.")
+                        bot.database.members.delete(member.discord_id)
+
+                        inactivity_channel = bot.get_channel(int(os.getenv("InactivityChannelId")))
+                        if inactivity_channel:
+                            embed = discord.Embed(
+                                title="Inactivity Notification",
+                                description=(f"👞💨 Removed (laid off) probationary staff {user.mention} from staff due to inactivity."),
+                                color=discord.Color.yellow()
+                            )
+                            await inactivity_channel.send(embed=embed)
+                        continue
+
+                    bot.database.members.move_to_retired(member.member_id, [str(role.id) for role in user.roles if role.id != guild.id])
+                    await user.remove_roles(*user.roles[1:], reason="Inactivity. Moved to retired staff.")
+                    
+                    role = guild.get_role(int(os.getenv("StaffRetiredRoleId")))
+                    if role:
+                        await user.add_roles(role, reason="Inactivity. Moved to retired staff.")
+
+                    inactivity_channel = bot.get_channel(int(os.getenv("InactivityChannelId")))
+                    if inactivity_channel:
+                        embed = discord.Embed(
+                            title="Inactivity Notification",
+                            description=(f"❌ Moved probationary staff {user.mention} to retired due to inactivity."),
+                            color=discord.Color.yellow()
+                        )
+                        await inactivity_channel.send(embed=embed)
+
+                    message = """
+                    Hello! In case you've forgotten, I am the bot that manages `Keiretsu`.
+
+                    Due to your inactivity over the past month, you have been moved from the `probationary staff` category to `retired`. All your roles were automatically removed. This is a necessary step to accurately track our active staff members.
+
+                    If you'd like to start working again or believe this was done in error, feel free to use the `/member restore` command. Your roles will be reinstated, but you will be removed from staff completely in `7 days` unless you claim a job within that period.
+                    """
+                    await user.send(textwrap.dedent(message))
+                elif trial_staff_id in user_roles and time_inactive >= 30:
+                    # Lay off silently.
+                    await user.remove_roles(*user.roles[1:], reason="Inactivity. Removed from trial.")
+                    bot.database.members.delete(member.discord_id)
+
+                    inactivity_channel = bot.get_channel(int(os.getenv("InactivityChannelId")))
+                    if inactivity_channel:
+                        embed = discord.Embed(
+                            title="Inactivity Notification",
+                            description=(f"👞💨 Removed (laid off) trial staff {user.mention} from staff due to inactivity."),
+                            color=discord.Color.yellow()
+                        )
+                        await inactivity_channel.send(embed=embed)
+
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
+
 @bot.event
 async def on_application_command_error(ctx, error):
     if isinstance(error, discord.errors.CheckFailure):
@@ -128,7 +256,10 @@ async def on_application_command_error(ctx, error):
 async def on_ready():
     print(f"Logged in as {bot.user}")
     bot.add_view(utils.views.JobboardView())
+
+    # Tasks
     milize_main_task.start()
+    inactivity_task.start()
 
 @bot.command(description="Sends the bot latency.")
 async def ping(ctx):

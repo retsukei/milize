@@ -90,7 +90,8 @@ CREATE TABLE IF NOT EXISTS Members (
     reminder_notifications INT DEFAULT 2, -- 0: Never, 1: 3 days, 2: 7 days, 3: 14 days
     jobboard_notifications BOOLEAN DEFAULT TRUE,
     stage_notifications BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    reminded_at TIMESTAMPTZ DEFAULT NULL
 );
 
 -- Create Series Subscriptions Table
@@ -102,7 +103,7 @@ CREATE TABLE IF NOT EXISTS SeriesSubscriptions (
     UNIQUE(member_id, series_id)
 );
 
--- Job Board Posts
+-- Job Board Posts Table
 CREATE TABLE IF NOT EXISTS BoardPosts (
     boardpost_id SERIAL PRIMARY KEY,
     message_id VARCHAR(100) NOT NULL,
@@ -111,6 +112,20 @@ CREATE TABLE IF NOT EXISTS BoardPosts (
     staff_level INT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(chapter_id, series_job_id)
+);
+
+-- Retired Members Table
+CREATE TABLE IF NOT EXISTS MembersRetired (
+    member_id INT PRIMARY KEY,
+    discord_id VARCHAR(100) NOT NULL,
+    credit_name VARCHAR(100),
+    authority_level INT,
+    reminder_notifications INT,
+    jobboard_notifications BOOLEAN,
+    stage_notifications BOOLEAN,
+    created_at TIMESTAMPTZ,
+    retired_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    roles VARCHAR(100)[]
 );
 
 -- ======================================================================
@@ -161,6 +176,54 @@ BEGIN
         BEFORE DELETE ON JobsAssignments
         FOR EACH ROW
         EXECUTE FUNCTION archive_jobs_assignments();
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TABLE IF NOT EXISTS MembersArchive (
+    member_id INT PRIMARY KEY,
+    discord_id VARCHAR(100) NOT NULL,
+    credit_name VARCHAR(100),
+    authority_level INT,
+    reminder_notifications INT,
+    jobboard_notifications BOOLEAN,
+    stage_notifications BOOLEAN,
+    created_at TIMESTAMPTZ,
+    archived_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(discord_id)
+);
+
+CREATE OR REPLACE FUNCTION archive_members() RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO MembersArchive
+    (member_id, discord_id, credit_name, authority_level, reminder_notifications, jobboard_notifications, stage_notifications, created_at)
+    VALUES
+    (OLD.member_id, OLD.discord_id, OLD.credit_name, OLD.authority_level, OLD.reminder_notifications, OLD.jobboard_notifications, OLD.stage_notifications, OLD.created_at)
+    ON CONFLICT (discord_id)
+    DO UPDATE SET
+        member_id = EXCLUDED.member_id,
+        credit_name = EXCLUDED.credit_name,
+        authority_level = EXCLUDED.authority_level,
+        reminder_notifications = EXCLUDED.reminder_notifications,
+        jobboard_notifications = EXCLUDED.jobboard_notifications,
+        stage_notifications = EXCLUDED.stage_notifications,
+        created_at = EXCLUDED.created_at;
+
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger
+        WHERE tgname = 'archive_members_before_delete'
+    ) THEN
+        CREATE TRIGGER archive_members_before_delete
+        BEFORE DELETE ON Members
+        FOR EACH ROW
+        EXECUTE FUNCTION archive_members();
     END IF;
 END;
 $$ LANGUAGE plpgsql;
