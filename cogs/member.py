@@ -319,10 +319,8 @@ class Member(commands.Cog):
                     )
                     await inactivity_channel.send(embed=embed)
 
-                if any(role == os.getenv("StaffProbationaryRoleId") for role in member.roles):
-                    await ctx.respond(embed=info("Your roles have been restored. You'll be removed from staff in `3 days` from now unless you claim a job. Welcome back!"))
-                else:
-                    await ctx.respond(embed=info("Your roles have been restored. You'll be moved back to inactive in `24 hours` from now unless you claim a job. Welcome back!"))
+                
+                await ctx.respond(embed=info("Your roles have been restored. You'll be moved back to inactive in `7 days` from now unless you claim a job. Welcome back!"))
         except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
             print(e)
             await ctx.respond(embed=error("Could not restore due to internal error."))
