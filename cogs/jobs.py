@@ -379,15 +379,15 @@ class Jobs(commands.Cog):
         user_id = str(user.id)
         member = ctx.bot.database.members.get(user_id)
         if member is None:
-            return await ctx.respond(embed=error(f"<@{user.id}> is not added to members in Milize."))
+            return await ctx.respond(embed=error(f"{user.mention} is not added to members in Milize."))
 
-        rows = ctx.bot.database.assignments.update_user(assignment.assignment_id, str(user))
+        rows = ctx.bot.database.assignments.update_user(assignment.assignment_id, user_id)
         if rows and rows > 0:
-            return await ctx.respond(embed=info(f"Job `{job_name}` has been assigned to <@{user.id}> for chapter `{chapter_name}`."))
+            return await ctx.respond(embed=info(f"Job `{job_name}` has been reassigned to <@{user.id}> for chapter `{chapter_name}`."))
 
         await ctx.respond(embed=error("No updates were made."))
 
-        ctx.bot.database.members.update_activity(str(user.id))
+        ctx.bot.database.members.update_activity(user_id)
 
     @Jobs.command(description="Unassigns the job of a chapter.")
     @check_authority(AuthorityLevel.ProjectManager)
