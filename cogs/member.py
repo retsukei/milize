@@ -46,6 +46,9 @@ class Member(commands.Cog):
                   authority: discord.Option(int, choices=AuthorityLevel.to_choices())):
         await ctx.defer()
 
+        if ctx.bot.database.members.get_retired(str(user.id)):
+            return await ctx.respond(embed=error(f"{user.mention} is currently in inactive category. Cannot add them again."))
+
         member_id = ctx.bot.database.members.add(str(user.id), authority)
         if member_id:
             return await ctx.respond(embed=info(f"<@{user.id}> has been added to members with authority level `{AuthorityLevel.to_string(authority)}`."))
@@ -321,6 +324,54 @@ class Member(commands.Cog):
 
                 
                 await ctx.respond(embed=info("Your roles have been restored. You'll be moved back to inactive in `7 days` from now unless you claim a job. Welcome back!"))
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+            print(e)
+            await ctx.respond(embed=error("Could not restore due to internal error."))
+
+    @Member.command(description="Restores member from retired staff (forced).")
+    @check_authority(AuthorityLevel.Owner)
+    async def force_restore(self, ctx, restore_user: discord.User, days: discord.Option(int, description="The amount of days before moving to retired.")):
+        await ctx.defer()
+
+        if days < 1 or days > 90:
+            return await ctx.respond(embed=error("`days` argument must be between 1 and 90."))
+
+        user_id = str(restore_user.id)
+        member = ctx.bot.database.members.get_retired(user_id)
+        if not member:
+            return await ctx.respond(embed=error(f"Could not find {restore_user.mention} in retired staff. Cannot restore."))
+
+        guild = ctx.bot.get_guild(int(os.getenv("StaffGuildId")))
+        try:
+            user = await guild.fetch_member(int(member.discord_id))
+            if user:
+                await user.remove_roles(*user.roles[1:], reason="Member restore. Moving to active staff.")
+                
+                for role_id in member.roles:
+                    role = guild.get_role(int(role_id))
+                    if role:
+                        await user.add_roles(role, reason="Member restore. Moving to active staff.")
+
+                ctx.bot.database.members.restore_from_retired(member.member_id, days)
+                inactivity_channel = ctx.bot.get_channel(int(os.getenv("InactivityChannelId")))
+                if inactivity_channel:
+                    role_mappings = {
+                        os.getenv('StaffFullRoleId'): "full",
+                        os.getenv('StaffProbationaryRoleId'): "probationary",
+                        os.getenv('StaffTrialRoleId'): "trial",
+                    }
+
+                    role_name = next((role_mappings[role] for role in member.roles if role in role_mappings), None)
+
+                    embed = discord.Embed(
+                        title="Inactivity Notification",
+                        description=(f"❗ Moved {role_name} staff {restore_user.mention} from retired to active ({ctx.author.mention} used `/member force_restore` command)."),
+                        color=discord.Color.yellow()
+                    )
+                    await inactivity_channel.send(embed=embed)
+
+                
+                await ctx.respond(embed=info(f"{restore_user.mention}'s roles have been restored. They'll be moved back to inactive in `{days} day(s)` from now unless they claim a job."))
         except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
             print(e)
             await ctx.respond(embed=error("Could not restore due to internal error."))

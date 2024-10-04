@@ -162,21 +162,18 @@ class Members:
             print(f"Failed to move member to retired: {e}")
 
     @check_connection
-    def restore_from_retired(self, member_id):
+    def restore_from_retired(self, member_id, days = 0):
         try:
-            # Fetch the member from the MembersRetired table
             self.cursor.execute("SELECT * FROM MembersRetired WHERE member_id = %s", (member_id,))
             retired_member = self.cursor.fetchone()
 
             if retired_member:
-                # Insert back into Members table
-                self.cursor.execute("""
+                self.cursor.execute(f"""
                     INSERT INTO members (member_id, discord_id, credit_name, authority_level, reminder_notifications, jobboard_notifications, stage_notifications, created_at, reminded_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP + INTERVAL '{days} days')
                     ON CONFLICT (member_id) DO NOTHING;
                 """, (retired_member.member_id, retired_member.discord_id, retired_member.credit_name, retired_member.authority_level, retired_member.reminder_notifications, retired_member.jobboard_notifications, retired_member.stage_notifications, retired_member.created_at))
                 
-                # Remove the member from MembersRetired
                 self.cursor.execute("DELETE FROM MembersRetired WHERE member_id = %s;", (member_id,))
                 self.connection.commit()
 
