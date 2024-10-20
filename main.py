@@ -203,6 +203,9 @@ async def inactivity_task():
                             )
                             await inactivity_channel.send(embed=embed)
                         continue
+                    
+                    if member.reminded_at:
+                        continue
 
                     bot.database.members.move_to_retired(member.member_id, [str(role.id) for role in user.roles if role.id != guild.id])
                     await user.remove_roles(*user.roles[1:], reason="Inactivity. Moved to retired staff.")
