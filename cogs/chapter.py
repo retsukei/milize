@@ -245,7 +245,7 @@ class Chapter(commands.Cog):
             await message.delete()
             return await ctx.respond(embed=error("Failed to create a job board post."))
 
-        await ctx.respond(embed=info(f"A post for `{job_name}` for chapter `{chapter_name}` has been made.\nThe post will be automatically deleted in **7 days** if not claimed.\nYou'll have to re-post it manually in that case."))
+        await ctx.respond(embed=info(f"A post for `{job_name}` for chapter `{chapter_name}` has been made.\nThe post will be automatically deleted in **30 days** if not claimed.\nYou'll have to re-post it manually in that case."))
 
     @Chapter.command(description="Removes a jobboard post for the job.")
     @check_authority(AuthorityLevel.ProjectManager)

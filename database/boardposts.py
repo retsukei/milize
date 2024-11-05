@@ -38,7 +38,7 @@ class Boardposts:
             FROM boardposts bp
             JOIN seriesjobs sj ON bp.series_job_id = sj.series_job_id
             JOIN jobs j ON sj.job_id = j.job_id
-            WHERE bp.created_at <= NOW() - INTERVAL '7 days';
+            WHERE bp.created_at <= NOW() - INTERVAL '30 days';
             """
             self.cursor.execute(query)
             self.connection.commit()
