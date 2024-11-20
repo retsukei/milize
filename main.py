@@ -80,6 +80,7 @@ def reminder_timedelta(reminder):
 
 @tasks.loop(hours=1)
 async def milize_main_task():
+    """
     now = datetime.now(timezone.utc)
     members = bot.database.members.get_with_reminder_notif()
     if members:
@@ -100,6 +101,7 @@ async def milize_main_task():
                                 await channel.send(f"<@{member.discord_id}>, you have unfinished task(s) for chapter `{chapter.chapter_name}` in series `{series.series_name}`.")
 
                         bot.database.assignments.update_reminder(assignment.assignment_id)
+    """
 
     jobboard_posts = bot.database.boardposts.get_for_removal()
     if jobboard_posts:
