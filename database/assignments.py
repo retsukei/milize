@@ -94,6 +94,17 @@ class Assignments:
             self.connection.rollback()
             print(f"Failed to get job assignment for chapter id '{chapter_id}': {e}")
             return None
+
+    @check_connection
+    def get_for_chapter(self, chapter_id):
+        try:
+            self.cursor.execute("SELECT assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at FROM jobsassignments WHERE chapter_id = %s", (chapter_id,))
+            self.connection.commit()
+            return self.cursor.fetchall()
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to get job assignments for chapter id '{chapter_id}': {e}")
+            return None
         
     @check_connection
     def delete(self, chapter_id, series_job_id):

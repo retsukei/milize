@@ -2,6 +2,7 @@ import discord
 import requests
 import re
 import os
+from datetime import datetime, timedelta, timezone
 from discord.ext import commands
 from discord.commands import SlashCommandGroup
 from natsort import natsorted
@@ -373,3 +374,30 @@ class Chapter(commands.Cog):
                 return await ctx.respond(embed=embed)
 
         await ctx.respond(embed=embed)
+
+    @Chapter.command(description="Marks all assignments in a chapter as completed.")
+    @check_authority(AuthorityLevel.ProjectManager)
+    async def complete(self,
+                        ctx,
+                        group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
+                        series_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_series_list)),
+                        chapter_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_chapter_list))):
+        await ctx.defer()
+
+        chapter = ctx.bot.database.chapters.get(series_name, chapter_name)
+        if chapter is None:
+            return await ctx.respond(embed=error(f"Failed to get chapter `{chapter_name}` for series `{series_name}`."))
+
+        assignments = ctx.bot.database.assignments.get_for_chapter(chapter.chapter_id)
+        if not assignments:
+            return await ctx.respond(embed=error(f"No assignments found for chapter `{chapter_name}`."))
+
+        for assignment in assignments:
+            account = True
+            if datetime.now(timezone.utc) - assignment.created_at < timedelta(minutes=5):
+                account = False
+
+            ctx.bot.database.assignments.update_status(chapter.chapter_id, assignment.series_job_id, JobStatus.Completed, account)
+
+        line = f"All assignments in chapter `{chapter_name}` for series `{series_name}` have been marked as `Completed`."
+        await ctx.respond(embed=info(line))
