@@ -30,6 +30,126 @@ class Chapters:
             self.connection.rollback()
             print(f"Failed to add chapter '{chapter_name}' for series '{series_name}': {e}")
             return None
+        
+    @check_connection
+    def new_upload_schedule(
+        self,
+        volume_number: int,
+        chapter_number: int,
+        language: str,
+        chapter_name: str,
+        group_ids: list[str],
+        series_id: str,
+        folder_name: str,
+        upload_time, 
+        discord_id: str,
+        series_name: str,
+        group_name: str,
+        chapter_id: int
+    ):
+        try:
+            query = """
+            INSERT INTO UploadSchedules (
+                volume_number,
+                chapter_number,
+                language,
+                chapter_name,
+                group_ids,
+                series_id,
+                folder_name,
+                upload_time,
+                discord_id,
+                series_name,
+                group_name,
+                chapter_id
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING upload_id;
+            """
+            self.cursor.execute(query, (
+                volume_number,
+                chapter_number,
+                language,
+                chapter_name,
+                group_ids,
+                series_id,
+                folder_name,
+                upload_time,
+                discord_id,
+                series_name,
+                group_name,
+                chapter_id
+            ))
+            self.connection.commit()
+
+            result = self.cursor.fetchone()
+            if result:
+                return result[0]
+            else:
+                return None
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to create upload schedule for chapter '{chapter_name}': {e}")
+            return None
+        
+    @check_connection
+    def get_active_scheduled_upload(self):
+        try:
+            query = """
+            SELECT *
+            FROM uploadschedules
+            WHERE upload_time <= NOW()
+            ORDER BY upload_time ASC
+            LIMIT 1;
+            """
+            self.cursor.execute(query)
+            result = self.cursor.fetchone()
+            return result
+        except Exception as e:
+            print(f"Failed to fetch scheduled upload: {e}")
+            return None
+        
+    @check_connection
+    def get_scheduled_upload_by_chapter(self, chapter_id):
+        try:
+            query = """
+            SELECT * FROM uploadschedules WHERE chapter_id = %s;
+            """
+            
+            self.cursor.execute(query, (chapter_id,))
+            return self.cursor.fetchone()
+        except Exception as e:
+            print(f"Failed to fetch scheduled upload: {e}")
+            return None
+        
+    @check_connection
+    def get_scheduled_upload(self, upload_id):
+        try:
+            query = """
+            SELECT * FROM uploadschedules WHERE upload_id = %s;
+            """
+            
+            self.cursor.execute(query, (upload_id,))
+            return self.cursor.fetchone()
+        except Exception as e:
+            print(f"Failed to fetch scheduled upload: {e}")
+            return None
+        
+    @check_connection
+    def delete_upload_schedule(self, upload_id: int):
+        try:
+            query = "DELETE FROM uploadschedules WHERE upload_id = %s;"
+            self.cursor.execute(query, (upload_id,))
+            self.connection.commit()
+
+            if self.cursor.rowcount > 0:
+                return True
+            else:
+                return False
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to delete upload schedule with ID {upload_id}: {e}")
+            return False
 
     @check_connection
     def delete(self, series_name, chapter_name):

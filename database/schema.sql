@@ -128,6 +128,23 @@ CREATE TABLE IF NOT EXISTS MembersRetired (
     roles VARCHAR(100)[]
 );
 
+-- Upload Scheduler Table
+CREATE TABLE IF NOT EXISTS UploadSchedules (
+    upload_id SERIAL PRIMARY KEY,
+    volume_number INT NOT NULL,
+    chapter_number INT NOT NULL,
+    language VARCHAR(20) NOT NULL,
+    chapter_name VARCHAR(100) NOT NULL,
+    group_ids VARCHAR(100)[] NOT NULL,
+    series_id VARCHAR(100) NOT NULL,
+    folder_name VARCHAR(100) NOT NULL,
+    upload_time TIMESTAMPTZ NOT NULL,
+    discord_id VARCHAR(100) NOT NULL,
+    series_name VARCHAR(100) NOT NULL,
+    group_name VARCHAR(100) NOT NULL,
+    chapter_id INT REFERENCES Chapters(chapter_id) ON DELETE CASCADE
+);
+
 -- ======================================================================
 -- ==================== DATA ARCHIVE AFTER THIS LINE ====================
 -- ======================================================================

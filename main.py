@@ -4,8 +4,10 @@ from discord.ext import tasks
 import dotenv
 import os
 import textwrap
+import shutil
 
 from database import DatabaseManager
+from mangadex import MangaDexAPI
 import utils
 
 bot = discord.Bot(intents=discord.Intents.all())
@@ -250,6 +252,61 @@ async def inactivity_task():
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             pass
 
+@tasks.loop(minutes=1)
+async def scheduled_upload_task():
+    scheduled_upload = bot.database.chapters.get_active_scheduled_upload()
+    if scheduled_upload:
+        # Remove from the database immediately.
+        bot.database.chapters.delete_upload_schedule(scheduled_upload.upload_id)
+
+        channel = bot.get_channel(int(os.getenv("MilizeChannelId")))
+        if channel:
+            embed = discord.Embed(
+                title=":yellow_square: Upload Scheduler",
+                description=f"Uploading chapter `{scheduled_upload.chapter_number}` in `{scheduled_upload.series_name}` by `{scheduled_upload.group_name}`\nStatus: `Preparing...`",
+                color=discord.Color.blue()
+            )
+            message = await channel.send(embed=embed)
+
+            session_id = bot.mangadex.check_for_session()
+            if session_id:
+                bot.mangadex.abandon_session(session_id)
+
+            session_id = bot.mangadex.create_session(scheduled_upload.group_ids, scheduled_upload.series_id)
+            if not session_id:
+                embed = discord.Embed(
+                    title=":red_square: Upload Scheduler",
+                    description=f"Uploading chapter `{scheduled_upload.chapter_number}` in `{scheduled_upload.series_name}` by `{scheduled_upload.group_name}`\nStatus: `Failed to create session.`",
+                    color=discord.Color.blue()
+                )
+                await message.edit(embed=embed)
+                return
+
+            embed.description = f"Uploading chapter `{scheduled_upload.chapter_number}` in `{scheduled_upload.series_name}` by `{scheduled_upload.group_name}`\nStatus: `Uploading...`"
+            await message.edit(embed=embed)
+            
+            chapter_id = bot.mangadex.upload_chapter(session_id, scheduled_upload.volume_number, scheduled_upload.chapter_number, scheduled_upload.chapter_name, scheduled_upload.language, scheduled_upload.folder_name, 1)
+
+            if not chapter_id:
+                embed = discord.Embed(
+                    title=":red_square: Upload Scheduler",
+                    description=f"Uploading chapter `{scheduled_upload.chapter_number}` in `{scheduled_upload.series_name}` by `{scheduled_upload.group_name}`\nStatus: `Failed to upload the chapter.`",
+                    color=discord.Color.blue()
+                )
+                await message.edit(embed=embed)
+                return
+
+            embed = discord.Embed(
+                title=":green_square: Upload Scheduler",
+                description=f"Uploading chapter `{scheduled_upload.chapter_number}` in `{scheduled_upload.series_name}` by `{scheduled_upload.group_name}`\nStatus: `Uploaded.`",
+                color=discord.Color.blue()
+            )
+            await message.edit(embed=embed)
+            await channel.send(content=f"<@{scheduled_upload.discord_id}> chapter is uploaded: https://mangadex.org/chapter/{chapter_id}")
+
+            if os.path.exists(scheduled_upload.folder_name):
+                shutil.rmtree(scheduled_upload.folder_name)
+
 @bot.event
 async def on_application_command_error(ctx, error):
     if isinstance(error, discord.errors.CheckFailure):
@@ -265,6 +322,7 @@ async def on_ready():
     # Tasks
     milize_main_task.start()
     inactivity_task.start()
+    scheduled_upload_task.start()
 
 @bot.command(description="Sends the bot latency.")
 async def ping(ctx):
@@ -276,5 +334,8 @@ bot.load_extension('cogs.chapter')
 bot.load_extension('cogs.jobs')
 bot.load_extension('cogs.member')
 bot.database = DatabaseManager(database=os.getenv("PostgresDatabase"), host=os.getenv("PostgresHost"), password=os.getenv("PostgresPassword"), user=os.getenv("PostgresUser"))
+
+bot.mangadex = MangaDexAPI()
+bot.mangadex.login(client_id=os.getenv("MangaDexId"), client_secret=os.getenv("MangaDexSecret"), username=os.getenv("MangaDexLogin"), password=os.getenv("MangaDexPassword"))
 
 bot.run(os.getenv("DiscordToken"))

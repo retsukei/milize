@@ -2,15 +2,30 @@ import discord
 import requests
 import re
 import os
+import langcodes
+import zipfile
+import warnings
+import psd_tools
+from PIL import Image
 from datetime import datetime, timedelta, timezone
 from discord.ext import commands
 from discord.commands import SlashCommandGroup
 from natsort import natsorted
+from urllib.parse import urlparse
 from utils.embeds import info, error
 from utils.checks import check_authority
 from utils.constants import AuthorityLevel, StaffLevel, JobStatus, JobType
 from utils.autocompletes import get_group_list, get_series_list, get_added_jobs, get_chapter_list
 from utils.views import JobboardView
+from utils.titlecase import to_title_case
+
+warnings.filterwarnings("ignore", module="psd_tools")
+
+def normalize_language(name: str) -> str | None:
+    try:
+        return langcodes.find(name).language
+    except LookupError:
+        return None
 
 def setup(bot):
     bot.add_cog(Chapter(bot))
@@ -119,6 +134,544 @@ class Chapter(commands.Cog):
             return await ctx.respond(embed=info(f"Chapter `{chapter_name}` for series `{series_name}` has been updated: {update_info}."))
         
         await ctx.respond(embed=error(f"Chapter `{chapter_name}` for series `{series_name}` not found."))
+
+    @Chapter.command(description="Cancels a scheduled upload.")
+    @check_authority(AuthorityLevel.Owner)
+    async def schedule_cancel(self,
+                              ctx,
+                              upload_id: discord.Option(int, description="Upload ID.")):
+        await ctx.defer()
+
+        scheduled_upload = ctx.bot.database.chapters.get_scheduled_upload(upload_id)
+        if not scheduled_upload:
+            return await ctx.respond(embed=error(f"No scheduled upload with ID `{upload_id}` was found."))
+        
+        ctx.bot.database.chapters.delete_upload_schedule(upload_id)
+        await ctx.respond(embed=info(f"Scheduled upload with ID `{upload_id}` has been canceled."))
+
+    @Chapter.command(description="Schedules a chapter for upload on mangadex.")
+    @check_authority(AuthorityLevel.Owner)
+    async def schedule(self,
+                       ctx,
+                       group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
+                       series_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_series_list)),
+                       chapter_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_chapter_list)),
+                       recruitment_page: discord.Option(discord.Attachment, description="Attach recruitment page png.") = None,
+                       credit_page: discord.Option(discord.Attachment, description="Attach credit page png.") = None,
+                       additional_page1: discord.Option(discord.Attachment, description="Additional page 1") = None,
+                       additional_page2: discord.Option(discord.Attachment, description="Additional page 2") = None,
+                       additional_page3: discord.Option(discord.Attachment, description="Additional page 3") = None,
+                       grayscale: discord.Option(bool, description="If the pages should be grayscale'd (applied by defailt)") = True):
+        await ctx.defer()
+
+        if not ctx.guild:
+            return await ctx.respond(embed=error("Not allowed in DMs."))
+        
+        if not ctx.bot.mangadex.access_token:
+            return await ctx.respond(embed=error("MangaDex.API is not initialized. Scheduling is not possible."))
+        
+        group_names = [group_name]
+
+        # Sanity checks
+        groups = []
+        for name in group_names:
+            group = ctx.bot.database.groups.get_by_name(name)
+            if not group:
+                return await ctx.respond(embed=error(f"Failed to get group `{name}`."))
+            
+            if not group.website or "mangadex.org/group/" not in group.website:
+                return await ctx.respond(embed=error(f"Group `{name}` does not have mangadex link attached or it's incorrect. Cannot upload."))
+
+            groups.append(group)
+
+        series = ctx.bot.database.series.get(group_name, series_name)
+        if not series:
+            return await ctx.respond(embed=error(f"Failed to get series `{series_name}` by `{group_name}`."))
+
+        chapter = ctx.bot.database.chapters.get(series_name, chapter_name)
+        if not chapter:
+            return await ctx.respond(embed=error(f"Failed to get chapter `{chapter_name}` for series `{series_name}`."))
+        
+        # Check if chapter is already scheduled for upload.
+        scheduled_upload = ctx.bot.database.chapters.get_scheduled_upload_by_chapter(chapter.chapter_id)
+        if scheduled_upload:
+            return await ctx.respond(embed=error(f"Chapter `{chapter_name}` is already scheduled for upload."))
+
+        if chapter.is_archived:
+            return await ctx.respond(embed=error(f"Chapter `{chapter_name}` is archived. Cannot upload."))
+        
+        if not chapter.drive_link:
+            return await ctx.respond(embed=error(f"Chapter `{chapter_name}` does not have GDrive link attached. Cannot upload."))
+        
+        if not series.mangadex or "mangadex.org/title/" not in series.mangadex:
+            return await ctx.respond(embed=error(f"Series `{series_name}` does not have MangaDex link attached or it's incorrect. Cannot upload."))
+        
+        response = requests.get(f"{os.getenv('KeiretsuUrl')}/api/list?id={re.search(r'/folders/([a-zA-Z0-9_-]+)', chapter.drive_link)[1]}")
+        if response.status_code != 200:
+            return await ctx.respond(embed=error("Failed to list drive files for the chapter or no 'tspr' folder is present."))
+        
+        typesetting_folder = next(
+            (item for item in response.json().get("files", []) if "tspr" in item["name"]),
+            None
+        )
+
+        response = requests.get(f"{os.getenv('KeiretsuUrl')}/api/list?id={typesetting_folder['id']}")
+        if response.status_code != 200:
+            return await ctx.respond(embed=error("Failed to count the amount of pages. Cannot upload."))
+        
+        files = response.json().get("files", [])
+        filtered_files = [file for file in files if file.get("mimeType") != 'application/vnd.google-apps.folder']
+        page_count = len(filtered_files)
+
+        if page_count < 1:
+            return await ctx.respond(embed=error("No .PSD files found in the chapter."))
+        
+        additional_pages = [recruitment_page, credit_page, additional_page1, additional_page2, additional_page3]
+        additional_pages_count = sum(1 for page in additional_pages if page is not None)
+
+        embed = discord.Embed(
+            title="Scheduling for upload",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Volume Number", value="None", inline=True)
+        embed.add_field(name="Chapter Number", value="None", inline=True)
+        embed.add_field(name="Scanlation Language", value="English", inline=True)
+        embed.add_field(name="Chapter Name", value="None", inline=True)
+        embed.add_field(name="Grayscale", value=grayscale, inline=True)
+        embed.add_field(name="Groups", value=", ".join(group_names) + ", Keiretsu", inline=False)
+        embed.add_field(name="Number of pages", value=f"{page_count}" if additional_pages_count < 1 else f"{page_count} + {additional_pages_count} additional", inline=False)
+        embed.add_field(name="To be uploaded at", value="None", inline=False)
+
+        if series.thumbnail:
+            embed.set_thumbnail(url=series.thumbnail)
+
+        metadata_button = discord.ui.Button(label="Metadata", style=discord.ButtonStyle.primary, custom_id="schedule_metadata")
+        time_button = discord.ui.Button(label="Time", style=discord.ButtonStyle.primary, custom_id="schedule_time")
+        add_group_button = discord.ui.Button(label="Add Group", style=discord.ButtonStyle.primary, custom_id="schedule_add_group")
+        remove_group_button = discord.ui.Button(label="Remove Group", style=discord.ButtonStyle.primary, custom_id="schedule_remove_group")
+        schedule_button = discord.ui.Button(label="Schedule", style=discord.ButtonStyle.success, custom_id="schedule_schedule", row=2)
+        cancel_button = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.danger, custom_id="schedule_cancel", row=2)
+
+        view = discord.ui.View()
+        view.add_item(metadata_button)
+        view.add_item(time_button)
+        view.add_item(add_group_button)
+        view.add_item(remove_group_button)
+        view.add_item(schedule_button)
+        view.add_item(cancel_button)
+        view.timeout = 120 # in seconds
+
+        message = await ctx.respond(embed=embed, view=view)
+
+        volume_number = None
+        chapter_number = None
+        scan_language = "English"
+        chapter_name_local = None
+        upload_time = None
+        proceed_called = False
+
+        async def update_embed():
+            embed.set_field_at(0, name="Volume Number", value=volume_number or "None", inline=True)
+            embed.set_field_at(1, name="Chapter Number", value=chapter_number or "None", inline=True)
+            embed.set_field_at(2, name="Scanlation Language", value=scan_language or "None", inline=True)
+            embed.set_field_at(3, name="Chapter Name", value=chapter_name_local or "None", inline=True)
+            embed.set_field_at(5, name="Groups", value=", ".join(group.group_name for group in groups) + ", Keiretsu", inline=False)
+            embed.set_field_at(7, name="To be uploaded at", value=f"{upload_time} UTC" or "None", inline=False)
+            await message.edit(embed=embed)
+
+        async def on_timeout():
+            try:
+                if proceed_called:
+                    return
+                
+                await message.delete()
+            except discord.DiscordException:
+                pass
+
+        async def on_proceed_timeout():
+            try:
+                await message.edit(view=None)
+            except discord.DiscordException:
+                pass
+
+        async def metadata_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return
+
+            async def metadata_modal_callback(interaction: discord.Interaction):
+                await interaction.response.defer()
+                nonlocal volume_number
+                nonlocal chapter_number
+                nonlocal scan_language
+                nonlocal chapter_name_local
+
+                volume_number = interaction.data['components'][0]['components'][0]['value'] or volume_number
+                chapter_number = interaction.data['components'][1]['components'][0]['value'] or chapter_number
+                chapter_name_local = interaction.data['components'][2]['components'][0]['value'] or chapter_name_local
+                scan_language = interaction.data['components'][3]['components'][0]['value'] or scan_language
+
+                await update_embed()
+
+            modal = discord.ui.Modal(
+                discord.ui.InputText(label="Volume Number", placeholder="Enter volume number...", required=False),
+                discord.ui.InputText(label="Chapter Number", placeholder="Enter chapter number...", required=False),
+                discord.ui.InputText(label="Chapter Name", placeholder="Enter chapter name...", required=False),
+                discord.ui.InputText(label="Scanlation Language", placeholder="Enter scanlation language...", required=False),
+                title="Chapter Metadata" )
+            modal.callback = metadata_modal_callback
+            await interaction.response.send_modal(modal)
+
+        async def time_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return
+            
+            async def time_modal_callback(interaction: discord.Interaction):
+                await interaction.response.defer()
+
+                nonlocal upload_time
+                upload_time_str = interaction.data['components'][0]['components'][0]['value']
+                try:
+                    upload_time = datetime.strptime(upload_time_str, "%Y-%m-%d %H:%M")
+                except ValueError:
+                    upload_time = "Invalid format."
+
+                await update_embed()
+            
+            modal = discord.ui.Modal(
+                discord.ui.InputText(label="Upload Time (in UTC)", placeholder="YYYY-MM-DD HH:MM"),
+                title="Upload Time"
+            )
+            modal.callback = time_modal_callback
+            await interaction.response.send_modal(modal)
+
+        async def add_group_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return
+            
+            async def add_group_modal_callback(interaction: discord.Interaction):
+                await interaction.response.defer()
+
+                nonlocal groups
+                nonlocal ctx
+
+                group_name_str = interaction.data['components'][0]['components'][0]['value']
+                group = ctx.bot.database.groups.get_by_name(group_name_str)
+                if group and "mangadex.org/group/" in group.website:
+                    groups.append(group)
+
+                await update_embed()
+
+            modal = discord.ui.Modal(
+                discord.ui.InputText(label="Group Name", placeholder="Enter group name..."),
+                title="Add Group"
+            )
+            modal.callback = add_group_modal_callback
+            await interaction.response.send_modal(modal)
+
+        async def remove_group_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return
+
+            async def remove_group_modal_callback(interaction: discord.Interaction):
+                await interaction.response.defer()
+
+                nonlocal groups
+                nonlocal ctx
+
+                group_name_str = interaction.data['components'][0]['components'][0]['value']
+                group = ctx.bot.database.groups.get_by_name(group_name_str)
+                if group and group in groups:
+                    groups.remove(group)
+
+                await update_embed()
+
+            modal = discord.ui.Modal(
+                discord.ui.InputText(label="Group Name", placeholder="Enter group name to remove..."),
+                title="Remove Group"
+            )
+            modal.callback = remove_group_modal_callback
+            await interaction.response.send_modal(modal)
+
+        async def cancel_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return
+
+            await interaction.response.defer()
+            try:
+                await interaction.message.delete()
+            except discord.DiscordException:
+                pass
+
+        async def proceed_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return
+            
+            nonlocal chapter
+            nonlocal upload_time
+            nonlocal proceed_called
+            nonlocal series
+            nonlocal volume_number
+            nonlocal chapter_number
+            nonlocal chapter_name_local
+            nonlocal scan_language
+
+            proceed_called = True
+            
+            await interaction.response.defer()
+            await interaction.message.edit(embed=info(":hourglass: Searching for 'tspr' folder..."), view=None)
+
+            match = re.search(r'/folders/([a-zA-Z0-9_-]+)', chapter.drive_link)
+            if not match:
+                return await interaction.message.edit(embed=error("Could not extract ID from the gdrive link."))
+            
+            list_url = f"{os.getenv('KeiretsuUrl')}/api/list?id={match[1]}"
+            try:
+                list_response = requests.get(list_url)
+                list_response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                print(e)
+                return await interaction.message.edit(embed=error("An error occurred while fetching the folder list."))
+
+            files = list_response.json()['files']
+            tspr_folder_id = None
+            for file in files:
+                if 'tspr' in file['name']:
+                    tspr_folder_id = file['id']
+                    break
+
+            if not tspr_folder_id:
+                return await interaction.message.edit(embed=error("Could not find the typesetting folder."))
+
+            download_url = f"{os.getenv('KeiretsuUrl')}/api/download_zip?id={tspr_folder_id}"
+
+            await interaction.message.edit(embed=info(":hourglass: Downloading PSDs from Google Drive..."))
+            try:
+                response = requests.get(download_url)
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                print(e)
+                return await interaction.message.edit(embed=error("An error occurred while downloading the PSDs. The `tspr` folder might be empty."))
+
+            content_disposition = response.headers.get('Content-Disposition', '')
+            if 'filename=' in content_disposition:
+                filename = content_disposition.split('filename=')[1].strip('\"')
+            else:
+                filename = os.path.basename(urlparse(download_url).path)
+
+            zip_file_path = os.path.join('./data', filename)
+            extracted_folder_path = os.path.join('./data', os.path.splitext(filename)[0])
+
+            with open(zip_file_path, 'wb') as f:
+                f.write(response.content)
+
+            try:
+                with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+                    zip_ref.extractall(extracted_folder_path)
+            except zipfile.BadZipFile:
+                return await interaction.message.edit(embed=error("The downloaded file is not a valid zip file."))
+            
+            try:
+                os.remove(zip_file_path)
+            except OSError as e:
+                print(f"Error deleting file {zip_file_path}: {e}")
+                return await interaction.message.edit(embed=error("An error occurred while cleaning up the .zip file."))
+
+            await interaction.message.edit(embed=info(":hourglass: Converting .PSDs to .PNGs..."), view=None)
+
+            try:
+                psd_files = [f for f in os.listdir(extracted_folder_path) if f.lower().endswith('.psd')]
+                if not psd_files:
+                     return await interaction.message.edit(embed=error("No PSD files found to convert."))
+                
+                for psd_file in psd_files:
+                    psd_file_path = os.path.join(extracted_folder_path, psd_file)
+
+                    psd = psd_tools.PSDImage.open(psd_file_path)
+                    image = psd.composite()
+
+                    if grayscale:
+                        image = image.convert('L')
+                        image = image.convert('P', palette=Image.ADAPTIVE, colors=256)
+
+                    png_file_path = os.path.join(extracted_folder_path, os.path.splitext(psd_file)[0] + '.png')
+                    image.save(png_file_path, format='PNG', optimize=True)
+
+                    os.remove(psd_file_path)
+
+                png_files = [f for f in os.listdir(extracted_folder_path) if f.lower().endswith('.png')]
+                get_num = lambda f: int(''.join(filter(str.isdigit, os.path.splitext(f)[0])) or 0)
+                max_page = max((get_num(f) for f in png_files), default=0) + 1
+
+                attachments_to_save = [additional_page1, additional_page2, additional_page3, recruitment_page, credit_page]
+                for attachment in attachments_to_save:
+                    if attachment:
+                        response = requests.get(attachment.url)
+                        if response.status_code == 200:
+                            local_filename = os.path.join(extracted_folder_path, f"{max_page:03}.png")
+                            with open(local_filename, 'wb') as f:
+                                f.write(response.content)
+
+                            max_page += 1
+                        else:
+                            await interaction.message.edit(embed=error("Failed to save additional pages."))
+                            return
+
+                group_ids = [
+                    match.group(1)
+                    for group in groups
+                    if (website := group.website) and (match := re.search(r"mangadex\.org/group/([\w-]+)", website))
+                ]
+                group_ids.append(os.getenv("MangaDexKeiretsuId"))
+
+                series_id = re.search(r"mangadex\.org/title/([\w-]+)", series.mangadex)[1]
+
+                upload_id = ctx.bot.database.chapters.new_upload_schedule(
+                    volume_number,
+                    chapter_number,
+                    normalize_language(scan_language),
+                    chapter_name_local,
+                    group_ids,
+                    series_id,
+                    extracted_folder_path,
+                    upload_time,
+                    ctx.author.id,
+                    series.series_name,
+                    group.group_name,
+                    chapter.chapter_id
+                )
+
+                if not upload_id:
+                    await interaction.message.edit(embed=error("Failed to create record for scheduled upload."))
+                    return
+
+                await interaction.message.edit(embed=info(f"Scheduled upload confirmed. It will be uploaded <t:{int(upload_time.timestamp())}:R>\nThe upload ID is `{upload_id}`. Use it as input if you need to cancel using `/chapter schedule_cancel`"), view=None)
+
+            except Exception as e:
+                print(f"Error converting PSDs to PNG: {e}")
+                await interaction.message.edit(embed=error("An error occurred while converting PSD files to PNG."), view=None)
+
+        async def schedule_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return
+            
+            await interaction.response.defer()
+
+            nonlocal chapter_name_local
+            nonlocal chapter_number
+            nonlocal volume_number
+            nonlocal scan_language
+            nonlocal upload_time
+            nonlocal groups
+
+            if upload_time:
+                upload_time = upload_time.replace(tzinfo=timezone.utc)
+
+            def is_number(s: str) -> bool:
+                try:
+                    float(s)
+                    return True
+                except ValueError:
+                    return False
+            
+            # Check everything and raise all issues before uploading.
+            schedule_attempt_issues = []
+
+            # Check metadata
+            if not chapter_number or not is_number(chapter_number):
+                schedule_attempt_issues.append({ "message": "Chapter number must be specified as a number.", "critical": True })
+
+            if not volume_number:
+                schedule_attempt_issues.append({ "message": "Volume number is not specified.", "critical": False })
+            elif not is_number(volume_number):
+                schedule_attempt_issues.append({ "message": "Volume number must be specified as a number.", "critical": True })
+
+            if not upload_time or not isinstance(upload_time, datetime):
+                schedule_attempt_issues.append({
+                    "message": "Upload time is not set or invalid.",
+                    "critical": True
+                })
+            elif upload_time <= datetime.now(timezone.utc):
+                schedule_attempt_issues.append({
+                    "message": "Upload time must be in the future.",
+                    "critical": True
+                })
+
+            if not chapter_name_local:
+                schedule_attempt_issues.append({ "message": "Chapter title must be specified.", "critical": True })
+            elif to_title_case(chapter_name_local) != chapter_name_local:
+                schedule_attempt_issues.append({ "message": f"Chapter name does not match with Chicago Title Case Style (`{to_title_case(chapter_name_local)}`)", "critical": False })
+
+            # Check if an actual language
+            if not normalize_language(scan_language):
+                schedule_attempt_issues.append({ "message": f"Language `{scan_language}` could not be found or normalized.", "critical": True })
+
+            # Check if uploader added as a member to all groups
+            if not groups or not isinstance(groups, list) or not all(groups):
+                schedule_attempt_issues.append({
+                    "message": "At least one scanlation group must be selected.",
+                    "critical": True
+                })
+            elif groups:
+                for group in groups:
+                    match = re.search(r"https?://mangadex\.org/group/([a-fA-F0-9-]{36})", group.website)
+                    if not match:
+                        schedule_attempt_issues.append({ "message": "One of the groups' website did not match mangadex group URL regex.", "critical": True })
+                        break
+
+                    group_data = ctx.bot.mangadex.group_by_id(match[1])
+                    relationships = group_data["relationships"]
+                    if not any(entry["id"] == ctx.bot.mangadex.uploader_uuid for entry in relationships):
+                        schedule_attempt_issues.append({ "message": f"`{group.group_name}` does not have `{os.getenv('MangaDexLogin')}` added to its members on mangadex.", "critical": True })
+                        break
+
+            description = ""
+            critical = any(entry["critical"] for entry in schedule_attempt_issues)
+
+            if len(schedule_attempt_issues) > 0:
+                description = "__**Upload Schedule Validator raised the following issues:**__"
+                for issue in schedule_attempt_issues:
+                    description += f"\n{':x:' if issue['critical'] else ':warning:'} {issue['message']}"
+
+                if critical:
+                    description += "\n\nAt least one was raised as `critical`. You can not proceed with the upload."
+                else:
+                    description += "\n\nNone were raised as `critical`, so you can proceed with the upload."
+            else:
+                description = ":white_check_mark: Upload Schedule Validator did not find any issues. You can proceed with the upload"
+
+            embed = discord.Embed(
+                description=description,
+                color=discord.Color.blue()
+            )
+
+            proceed_button = discord.ui.Button(label="Proceed", style=discord.ButtonStyle.green)
+            proceed_button.callback = proceed_callback
+
+            cancel_button = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.red)
+            cancel_button.callback = cancel_callback
+
+            view = None
+
+            if not critical:
+                view = discord.ui.View()
+                view.add_item(proceed_button)
+                view.add_item(cancel_button)
+
+                view.timeout = 120
+                view.on_timeout = on_proceed_timeout
+
+            await interaction.message.edit(embed=embed, view=view)
+
+        view.on_timeout = on_timeout
+        metadata_button.callback = metadata_callback
+        time_button.callback = time_callback
+
+        add_group_button.callback = add_group_callback
+        remove_group_button.callback = remove_group_callback
+
+        cancel_button.callback = cancel_callback
+        schedule_button.callback = schedule_callback
+
 
     @Chapter.command(description="Lists all chapters in a series.")
     async def list(self,
