@@ -6,6 +6,7 @@ import langcodes
 import zipfile
 import warnings
 import psd_tools
+import shutil
 from PIL import Image
 from datetime import datetime, timedelta, timezone
 from discord.ext import commands
@@ -21,7 +22,7 @@ from utils.titlecase import to_title_case
 
 warnings.filterwarnings("ignore", module="psd_tools")
 
-def normalize_language(name: str) -> str | None:
+def normalize_language(name: str):
     try:
         return langcodes.find(name).language
     except LookupError:
@@ -145,6 +146,9 @@ class Chapter(commands.Cog):
         scheduled_upload = ctx.bot.database.chapters.get_scheduled_upload(upload_id)
         if not scheduled_upload:
             return await ctx.respond(embed=error(f"No scheduled upload with ID `{upload_id}` was found."))
+        
+        if os.path.exists(scheduled_upload.folder_name):
+            shutil.rmtree(scheduled_upload.folder_name)
         
         ctx.bot.database.chapters.delete_upload_schedule(upload_id)
         await ctx.respond(embed=info(f"Scheduled upload with ID `{upload_id}` has been canceled."))
@@ -499,18 +503,29 @@ class Chapter(commands.Cog):
                     os.remove(psd_file_path)
 
                 png_files = [f for f in os.listdir(extracted_folder_path) if f.lower().endswith('.png')]
-                def get_num(f):
-                    filename_without_ext = os.path.splitext(f)[0]
-                    digits = ''.join(filter(str.isdigit, filename_without_ext))
-                    return int(digits) if digits else 0
-                max_page = max((get_num(f) for f in png_files), default=0) + 1
+
+                def extract_num_and_padding(filename):
+                    match = re.search(r'(\d+)', os.path.splitext(filename)[0])
+                    if match:
+                        num_str = match.group(1)
+                        return int(num_str), len(num_str)
+                    return 0, 0
+
+                numbers_and_paddings = [extract_num_and_padding(f) for f in png_files]
+                max_num = max((n for n, _ in numbers_and_paddings), default=0)
+                padding = max((p for _, p in numbers_and_paddings), default=0)
+
+                max_page = max_num + 1
 
                 attachments_to_save = [additional_page1, additional_page2, additional_page3, recruitment_page, credit_page]
                 for attachment in attachments_to_save:
                     if attachment:
                         response = requests.get(attachment.url)
                         if response.status_code == 200:
-                            local_filename = os.path.join(extracted_folder_path, f"{max_page:03}.png")
+                            filename = (
+                                f"{max_page:0{padding}d}.png" if padding else f"{max_page}.png"
+                            )
+                            local_filename = os.path.join(extracted_folder_path, filename)
                             with open(local_filename, 'wb') as f:
                                 f.write(response.content)
 
