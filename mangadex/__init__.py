@@ -125,8 +125,8 @@ class MangaDexAPI:
         successful = []
         failed = []
         batches = [
-            page_map[l : l + batch_size]
-            for l in range(0, len(page_map), batch_size)
+            page_map[_l : _l + batch_size]
+            for _l in range(0, len(page_map), batch_size)
         ]
 
         for i in range(len(batches)):

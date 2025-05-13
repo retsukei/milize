@@ -499,7 +499,10 @@ class Chapter(commands.Cog):
                     os.remove(psd_file_path)
 
                 png_files = [f for f in os.listdir(extracted_folder_path) if f.lower().endswith('.png')]
-                get_num = lambda f: int(''.join(filter(str.isdigit, os.path.splitext(f)[0])) or 0)
+                def get_num(f):
+                    filename_without_ext = os.path.splitext(f)[0]
+                    digits = ''.join(filter(str.isdigit, filename_without_ext))
+                    return int(digits) if digits else 0
                 max_page = max((get_num(f) for f in png_files), default=0) + 1
 
                 attachments_to_save = [additional_page1, additional_page2, additional_page3, recruitment_page, credit_page]
