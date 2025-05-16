@@ -338,7 +338,7 @@ async def scheduled_upload_task():
                 new_chapter_data = {
                     "last_updated": str(int(time.time())),
                     "groups": {
-                        scheduled_upload.group_name: uploaded_urls
+                        f"{scheduled_upload.group_name}, Keiretsu": uploaded_urls
                     }
                 }
 
