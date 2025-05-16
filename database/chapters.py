@@ -45,6 +45,8 @@ class Chapters:
         discord_id: str,
         series_name: str,
         group_name: str,
+        github_link: str,
+        upload_websites: list[str],
         chapter_id: int
     ):
         try:
@@ -61,9 +63,11 @@ class Chapters:
                 discord_id,
                 series_name,
                 group_name,
+                github_link,
+                upload_websites,
                 chapter_id
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING upload_id;
             """
             self.cursor.execute(query, (
@@ -78,6 +82,8 @@ class Chapters:
                 discord_id,
                 series_name,
                 group_name,
+                github_link,
+                upload_websites,
                 chapter_id
             ))
             self.connection.commit()

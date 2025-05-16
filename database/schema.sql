@@ -17,7 +17,9 @@ CREATE TABLE IF NOT EXISTS Series (
     series_drive_link VARCHAR(255) NOT NULL,
     style_guide VARCHAR(255),
     mangadex VARCHAR(255),
+    github_link VARCHAR(255),
     thumbnail VARCHAR(255),
+    blocked_websites VARCHAR(100)[],
     is_archived BOOLEAN DEFAULT FALSE,
     group_id INT REFERENCES Groups(group_id) ON DELETE CASCADE
 );
@@ -131,10 +133,10 @@ CREATE TABLE IF NOT EXISTS MembersRetired (
 -- Upload Scheduler Table
 CREATE TABLE IF NOT EXISTS UploadSchedules (
     upload_id SERIAL PRIMARY KEY,
-    volume_number INT NOT NULL,
+    volume_number INT,
     chapter_number INT NOT NULL,
     language VARCHAR(20) NOT NULL,
-    chapter_name VARCHAR(100) NOT NULL,
+    chapter_name VARCHAR(100),
     group_ids VARCHAR(100)[] NOT NULL,
     series_id VARCHAR(100) NOT NULL,
     folder_name VARCHAR(100) NOT NULL,
@@ -142,6 +144,8 @@ CREATE TABLE IF NOT EXISTS UploadSchedules (
     discord_id VARCHAR(100) NOT NULL,
     series_name VARCHAR(100) NOT NULL,
     group_name VARCHAR(100) NOT NULL,
+    github_link VARCHAR(100),
+    upload_websites VARCHAR(100)[] NOT NULL,
     chapter_id INT REFERENCES Chapters(chapter_id) ON DELETE CASCADE
 );
 

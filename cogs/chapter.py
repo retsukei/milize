@@ -99,7 +99,7 @@ class Chapter(commands.Cog):
                      chapter_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_chapter_list))):
         await ctx.defer()
 
-        if str(ctx.author.id) != os.getenv("DiscordDevId"):
+        if str(ctx.author.id) != os.getenv("DiscordDevId") and str(ctx.author.id) != os.getenv("DiscordOwnerId"):
             return await ctx.respond(embed=error(f"Use the `/chapter archive` command to archive a completed chapter.\nIf you need to delete a chapter, ping <@{os.getenv('DiscordDevId')}>"))
 
         rows = ctx.bot.database.chapters.delete(series_name, chapter_name)
@@ -191,6 +191,9 @@ class Chapter(commands.Cog):
         series = ctx.bot.database.series.get(group_name, series_name)
         if not series:
             return await ctx.respond(embed=error(f"Failed to get series `{series_name}` by `{group_name}`."))
+        
+        if series.blocked_websites and "mangadex" in series.blocked_websites and "cubari" in series.blocked_websites:
+            return await ctx.respond(embed=error("All websites are blocked for this series. Cannot upload."))
 
         chapter = ctx.bot.database.chapters.get(series_name, chapter_name)
         if not chapter:
@@ -244,7 +247,7 @@ class Chapter(commands.Cog):
         embed.add_field(name="Grayscale", value=grayscale, inline=True)
         embed.add_field(name="Groups", value=", ".join(group_names) + ", Keiretsu", inline=False)
         embed.add_field(name="Number of pages", value=f"{page_count}" if additional_pages_count < 1 else f"{page_count} + {additional_pages_count} additional", inline=False)
-        embed.add_field(name="To be uploaded at", value="None", inline=False)
+        embed.add_field(name="To be uploaded at", value="As soon as possible", inline=False)
 
         if series.thumbnail:
             embed.set_thumbnail(url=series.thumbnail)
@@ -256,6 +259,26 @@ class Chapter(commands.Cog):
         schedule_button = discord.ui.Button(label="Schedule", style=discord.ButtonStyle.success, custom_id="schedule_schedule", row=2)
         cancel_button = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.danger, custom_id="schedule_cancel", row=2)
 
+        upload_websites = ["mangadex", "cubari"]
+        blocked = series.blocked_websites or []
+        allowed_websites = [w for w in upload_websites if w not in blocked]
+
+        options = [
+            discord.SelectOption(
+                label=website,
+                value=website,
+                default=website in upload_websites  # You can tweak this if default selection logic changes
+            ) for website in allowed_websites
+        ]
+
+        select_menu = discord.ui.Select(
+            placeholder="Choose an option...",
+            custom_id="schedule_select",
+            min_values=1,
+            max_values=min(2, len(options)),
+            options=options
+        )
+
         view = discord.ui.View()
         view.add_item(metadata_button)
         view.add_item(time_button)
@@ -263,7 +286,8 @@ class Chapter(commands.Cog):
         view.add_item(remove_group_button)
         view.add_item(schedule_button)
         view.add_item(cancel_button)
-        view.timeout = 120 # in seconds
+        view.add_item(select_menu)
+        view.timeout = 120  # in seconds
 
         message = await ctx.respond(embed=embed, view=view)
 
@@ -275,13 +299,36 @@ class Chapter(commands.Cog):
         proceed_called = False
 
         async def update_embed():
+            nonlocal select_menu
+            nonlocal allowed_websites
+
             embed.set_field_at(0, name="Volume Number", value=volume_number or "None", inline=True)
             embed.set_field_at(1, name="Chapter Number", value=chapter_number or "None", inline=True)
             embed.set_field_at(2, name="Scanlation Language", value=scan_language or "None", inline=True)
             embed.set_field_at(3, name="Chapter Name", value=chapter_name_local or "None", inline=True)
             embed.set_field_at(5, name="Groups", value=", ".join(group.group_name for group in groups) + ", Keiretsu", inline=False)
-            embed.set_field_at(7, name="To be uploaded at", value=f"{upload_time} UTC" or "None", inline=False)
-            await message.edit(embed=embed)
+            embed.set_field_at(7, name="To be uploaded at", value=f"{upload_time if upload_time else 'As soon as possible'}", inline=False)
+
+            view.remove_item(select_menu)
+
+            options = [
+                discord.SelectOption(
+                    label=website,
+                    value=website,
+                    default=website in upload_websites
+                ) for website in allowed_websites
+            ]
+
+            select_menu = discord.ui.Select(
+                placeholder="Choose an option...",
+                custom_id="schedule_select",
+                min_values=1,
+                max_values=min(2, len(options)),
+                options=options
+            )
+            view.add_item(select_menu)
+
+            await message.edit(embed=embed, view=view)
 
         async def on_timeout():
             try:
@@ -406,6 +453,14 @@ class Chapter(commands.Cog):
             except discord.DiscordException:
                 pass
 
+        async def select_website_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return
+            
+            await interaction.response.defer()
+            upload_websites.clear()
+            upload_websites.extend(select_menu.values)
+
         async def proceed_callback(interaction: discord.Interaction):
             if interaction.user.id != ctx.author.id:
                 return
@@ -418,6 +473,7 @@ class Chapter(commands.Cog):
             nonlocal chapter_number
             nonlocal chapter_name_local
             nonlocal scan_language
+            nonlocal upload_websites
 
             proceed_called = True
             
@@ -551,10 +607,12 @@ class Chapter(commands.Cog):
                     group_ids,
                     series_id,
                     extracted_folder_path,
-                    upload_time,
+                    upload_time if upload_time else datetime.now(timezone.utc),
                     ctx.author.id,
                     series.series_name,
                     group.group_name,
+                    series.github_link,
+                    upload_websites,
                     chapter.chapter_id
                 )
 
@@ -562,7 +620,7 @@ class Chapter(commands.Cog):
                     await interaction.message.edit(embed=error("Failed to create record for scheduled upload."))
                     return
 
-                await interaction.message.edit(embed=info(f"Scheduled upload confirmed. It will be uploaded <t:{int(upload_time.timestamp())}:R>\nThe upload ID is `{upload_id}`. Use it as input if you need to cancel using `/chapter schedule_cancel`"), view=None)
+                await interaction.message.edit(embed=info(f"Scheduled upload confirmed. It will be uploaded {f'<t:{int(upload_time.timestamp())}:R>' if upload_time else 'as soon as possible.'}\nThe upload ID is `{upload_id}`. Use it as input if you need to cancel using `/chapter schedule_cancel`"), view=None)
 
             except Exception as e:
                 print(f"Error converting PSDs to PNG: {e}")
@@ -580,6 +638,7 @@ class Chapter(commands.Cog):
             nonlocal scan_language
             nonlocal upload_time
             nonlocal groups
+            nonlocal upload_websites
 
             if upload_time:
                 upload_time = upload_time.replace(tzinfo=timezone.utc)
@@ -594,6 +653,9 @@ class Chapter(commands.Cog):
             # Check everything and raise all issues before uploading.
             schedule_attempt_issues = []
 
+            if "cubari" in upload_websites and not series.github_link:
+                schedule_attempt_issues.append({ "message": "You try to upload to cubari, but github link is required (set via `/series edit`)", "critical": True })
+
             # Check metadata
             if not chapter_number or not is_number(chapter_number):
                 schedule_attempt_issues.append({ "message": "Chapter number must be specified as a number.", "critical": True })
@@ -606,16 +668,16 @@ class Chapter(commands.Cog):
             if not upload_time or not isinstance(upload_time, datetime):
                 schedule_attempt_issues.append({
                     "message": "Upload time is not set or invalid.",
-                    "critical": True
+                    "critical": False
                 })
             elif upload_time <= datetime.now(timezone.utc):
                 schedule_attempt_issues.append({
                     "message": "Upload time must be in the future.",
-                    "critical": True
+                    "critical": False
                 })
 
             if not chapter_name_local:
-                schedule_attempt_issues.append({ "message": "Chapter title must be specified.", "critical": True })
+                schedule_attempt_issues.append({ "message": "Chapter name is not specified.", "critical": False })
             elif to_title_case(chapter_name_local) != chapter_name_local:
                 schedule_attempt_issues.append({ "message": f"Chapter name does not match with Chicago Title Case Style (`{to_title_case(chapter_name_local)}`)", "critical": False })
 
@@ -683,6 +745,7 @@ class Chapter(commands.Cog):
         view.on_timeout = on_timeout
         metadata_button.callback = metadata_callback
         time_button.callback = time_callback
+        select_menu.callback = select_website_callback
 
         add_group_button.callback = add_group_callback
         remove_group_button.callback = remove_group_callback

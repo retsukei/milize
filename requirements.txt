@@ -7,3 +7,5 @@ unidecode==1.4.0
 langcodes==3.5.0
 psd-tools==1.9.34
 pillow==10.4.0
+catboxpy==0.1.0
+httpx==0.28.1

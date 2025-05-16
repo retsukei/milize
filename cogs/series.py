@@ -2,12 +2,17 @@ import discord
 import re
 import os
 import requests
+import base64
+import json
 from discord.ext import commands
 from discord.commands import SlashCommandGroup
 from utils.embeds import info, error
 from utils.checks import check_authority
 from utils.constants import AuthorityLevel
 from utils.autocompletes import get_group_list, get_series_list, get_added_jobs, get_unadded_jobs
+
+def normalize_series_name(name: str) -> str:
+    return re.sub(r"[^\w\-]", "_", name.strip().lower())
 
 async def get_series_list_by_source(ctx: discord.AutocompleteContext):
     series_list = ctx.bot.database.series.get_by_group_name(ctx.options['source_group_name'])
@@ -43,6 +48,7 @@ class Series(commands.Cog):
                     drive_link: str,
                     style_guide: str = None,
                     mangadex: str = None,
+                    github_link: str = None,
                     thumbnail: str = None):
         await ctx.defer()
 
@@ -54,7 +60,7 @@ class Series(commands.Cog):
         if match is None:
             return await ctx.respond(embed=error("Incorrect Google Drive folder URL."))
 
-        series_id = ctx.bot.database.series.new(group[0], series_name, drive_link, style_guide, mangadex, thumbnail)
+        series_id = ctx.bot.database.series.new(group[0], series_name, drive_link, style_guide, mangadex, github_link, thumbnail)
         if not series_id:
             return await ctx.respond(embed=error(f"Failed to add new series `{series_name}` for group `{group_name}`."))
 
@@ -107,13 +113,14 @@ class Series(commands.Cog):
                     new_drive_link: str = None,
                     new_style_guide: str = None,
                     new_mangadex: str = None,
+                    new_github_link: str = None,
                     new_thumbnail: str = None):
         await ctx.defer()
 
-        if not new_name and not new_drive_link and not new_style_guide and not new_mangadex and not new_thumbnail:
-            return await ctx.respond(embed=error("You must provide at least one of `new_name`, `new_drive_link`, `new_style_guide`, `new_mangadex` or `new_thumbnail`."))
+        if not new_name and not new_drive_link and not new_style_guide and not new_mangadex and not new_thumbnail and not new_github_link:
+            return await ctx.respond(embed=error("You must provide at least one of `new_name`, `new_drive_link`, `new_style_guide`, `new_mangadex`, `new_github_link` or `new_thumbnail`."))
 
-        rows = ctx.bot.database.series.update(series_name, new_name, new_drive_link, new_style_guide, new_mangadex, new_thumbnail)
+        rows = ctx.bot.database.series.update(series_name, new_name, new_drive_link, new_style_guide, new_mangadex, new_github_link, new_thumbnail)
 
         if rows and rows > 0:
             return await ctx.respond(embed=info(f"Series `{series_name}` has been updated."))
@@ -140,6 +147,77 @@ class Series(commands.Cog):
             return await ctx.respond(embed=info(f"Series `{series_name}` has been moved to `{group_to.group_name}`."))
 
         await ctx.respond(embed=info("Failed to update."))
+
+    @Series.command(description="Creates a github .json file to upload on cubari")
+    @check_authority(AuthorityLevel.ProjectManager)
+    async def add_github(self,
+                         ctx,
+                         group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
+                         series_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_series_list)),
+                         title: str,
+                         description: str,
+                         artist: str,
+                         author: str,
+                         cover: str):
+        await ctx.defer()
+
+        series = ctx.bot.database.series.get(group_name, series_name)
+        if not series:
+            return await ctx.respond(embed=error("Failed to get series."))
+        
+        if series.github_link:
+            return await ctx.respond(embed=error(f"GitHub link is already set for series `{series_name}`"))
+        
+        file_name = normalize_series_name(series_name) + ".json"
+        owner = os.getenv("GitHubUsername")
+        repo = os.getenv("GitHubRepo")
+        branch = "main"
+        url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_name}"
+        headers = {
+            "Authorization": f"token {os.getenv('GitHubToken')}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        try:
+            response = requests.get(url, headers=headers, params={"ref": branch})
+            response.raise_for_status()
+            data = response.json()
+            content = base64.b64decode(data["content"]).decode("utf-8")
+            json_data = json.loads(content)
+            sha = data["sha"]
+        except requests.HTTPError as e:
+            if e.response.status_code == 404:
+                json_data = {
+                    "title": title,
+                    "description": description,
+                    "artist": artist,
+                    "author": author,
+                    "cover": cover,
+                    "chapters": {}
+                }
+                sha = None
+            else:
+                raise
+
+        updated_content = json.dumps(json_data, indent=2)
+        encoded_content = base64.b64encode(updated_content.encode("utf-8")).decode("utf-8")
+
+        commit_message = f"[{series_name}] Initialize metadata"
+        update_data = {
+            "message": commit_message,
+            "content": encoded_content,
+            "branch": branch,
+        }
+        if sha:
+            update_data["sha"] = sha
+
+        update_response = requests.put(url, headers=headers, json=update_data)
+        update_response.raise_for_status()
+
+        rows = ctx.bot.database.series.update(series_name=series_name, new_github_link=f"https://github.com/{owner}/{repo}/blob/{branch}/{file_name}")
+        if rows is None:
+            return await ctx.respond(embed=error("Failed to update database with the github link."))
+
+        await ctx.respond(embed=info(f"Github file `{file_name}` for series **{series_name}** has been successfully added."))
 
     @Series.command(description="Attaches job to a series.")
     @check_authority(AuthorityLevel.ProjectManager)
@@ -353,6 +431,68 @@ class Series(commands.Cog):
             return await ctx.respond(embed=error(f"Failed to remove assignment for job `{job_name}` for series `{series_name}`."))
 
         await ctx.respond(embed=info(f"Assignment for job `{job_name}` for series `{series_name}` has been removed."))
+
+    @Series.command(description="Blocks series from being uploaded to specified website.")
+    @check_authority(AuthorityLevel.Owner)
+    async def block_website(
+        self,
+        ctx,
+        group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
+        series_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_series_list)),
+        website: discord.Option(str, description="Website to block.")
+    ):
+        await ctx.defer()
+
+        if str(ctx.author.id) != os.getenv("DiscordDevId") and str(ctx.author.id) != os.getenv("DiscordOwnerId"):
+            return await ctx.respond(embed=error("Not allowed. Ping owner or developer."))
+
+        series = ctx.bot.database.series.get(group_name, series_name)
+        if not series:
+            return await ctx.respond(embed=error(f"Failed to get series `{series_name}` for `{group_name}`."))
+
+        blocked_websites = series.blocked_websites or []
+
+        if website in blocked_websites:
+            return await ctx.respond(embed=error("Specified website is already blocked for this series."))
+
+        blocked_websites.append(website)
+
+        updated = ctx.bot.database.series.update_blocked_websites(series_name, blocked_websites)
+        if not updated:
+            return await ctx.respond(embed=error("Failed to update blocked websites."))
+
+        return await ctx.respond(embed=info(f"Website `{website}` is now blocked for series `{series_name}`."))
+    
+    @Series.command(description="Unblocks a website for a specific series.")
+    @check_authority(AuthorityLevel.Owner)
+    async def unblock_website(
+        self,
+        ctx,
+        group_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_group_list)),
+        series_name: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(get_series_list)),
+        website: discord.Option(str, description="Website to unblock.")
+    ):
+        await ctx.defer()
+
+        if str(ctx.author.id) != os.getenv("DiscordDevId") and str(ctx.author.id) != os.getenv("DiscordOwnerId"):
+            return await ctx.respond(embed=error("Not allowed. Ping owner or developer."))
+
+        series = ctx.bot.database.series.get(group_name, series_name)
+        if not series:
+            return await ctx.respond(embed=error(f"Failed to get series `{series_name}` for `{group_name}`."))
+
+        blocked_websites = series.blocked_websites or []
+
+        if website not in blocked_websites:
+            return await ctx.respond(embed=error(f"Website `{website}` is not currently blocked for this series."))
+
+        blocked_websites.remove(website)
+
+        updated = ctx.bot.database.series.update_blocked_websites(series_name, blocked_websites)
+        if not updated:
+            return await ctx.respond(embed=error("Failed to update blocked websites."))
+
+        return await ctx.respond(embed=info(f"Website `{website}` is now unblocked for series `{series_name}`."))
 
     @Series.command(description="Lists all roles at the series level.")
     @check_authority(AuthorityLevel.Member)

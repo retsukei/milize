@@ -6,9 +6,9 @@ class Series:
         self.cursor = cursor
 
     @check_connection
-    def new(self, group_id, name, drive_link, style_guide, mangadex, thumbnail):
+    def new(self, group_id, name, drive_link, style_guide, mangadex, github_link, thumbnail):
         try:
-            self.cursor.execute("INSERT INTO series (series_name, series_drive_link, style_guide, group_id, mangadex, thumbnail) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (series_name) DO NOTHING RETURNING series_id;", (name, drive_link, style_guide, group_id, mangadex, thumbnail))
+            self.cursor.execute("INSERT INTO series (series_name, series_drive_link, style_guide, group_id, mangadex, github_link, thumbnail) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (series_name) DO NOTHING RETURNING series_id;", (name, drive_link, style_guide, group_id, mangadex, github_link, thumbnail))
             self.connection.commit()
 
             series_id = self.cursor.fetchone()
@@ -29,7 +29,8 @@ class Series:
     def get(self, group_name, series_name):
         try:
             query = """
-                SELECT s.series_id, s.series_name, s.series_drive_link, s.style_guide, s.mangadex, g.group_id, g.group_name, s.thumbnail, s.is_archived
+                SELECT s.series_id, s.series_name, s.series_drive_link, s.style_guide, s.mangadex, g.group_id, g.group_name, s.thumbnail, s.is_archived,
+                s.github_link, s.blocked_websites
                 FROM series s
                 JOIN groups g ON s.group_id = g.group_id
                 WHERE g.group_name = %s AND s.series_name = %s;
@@ -109,9 +110,26 @@ class Series:
             self.connection.rollback()
             print(f"Failed to select all series from group: {e}")
             return []
+        
+    @check_connection
+    def update_blocked_websites(self, series_name, blocked_websites):
+        try:
+            query = """
+                UPDATE series
+                SET blocked_websites = %s
+                WHERE series_name = %s;
+            """
+            self.cursor.execute(query, (blocked_websites, series_name))
+            self.connection.commit()
+            return True
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to update blocked websites for series '{series_name}': {e}")
+            return False
+
 
     @check_connection
-    def update(self, series_name, new_name = None, new_drive_link = None, new_style_guide = None, new_mangadex = None, new_thumbnail = None):
+    def update(self, series_name, new_name = None, new_drive_link = None, new_style_guide = None, new_mangadex = None, new_github_link = None, new_thumbnail = None):
         updates = []
         params = []
 
@@ -136,6 +154,12 @@ class Series:
                 params.append(None)
             else:
                 params.append(new_mangadex)
+        if new_github_link:
+            updates.append("github_link = %s")
+            if new_github_link == 'none':
+                params.append(None)
+            else:
+                params.append(new_github_link)
 
         if new_thumbnail:
             updates.append("thumbnail = %s")

@@ -1,10 +1,17 @@
 import discord
 from datetime import datetime, timedelta, timezone
 from discord.ext import tasks
+from natsort import natsorted
 import dotenv
 import os
 import textwrap
 import shutil
+from catboxpy.catbox import CatboxClient
+import time
+import requests
+import base64
+import json
+from urllib.parse import urlparse
 
 from database import DatabaseManager
 from mangadex import MangaDexAPI
@@ -12,6 +19,18 @@ import utils
 
 bot = discord.Bot(intents=discord.Intents.all())
 dotenv.load_dotenv()
+
+def parse_github_url(blob_url):
+    parts = urlparse(blob_url).path.strip("/").split("/")
+    if len(parts) < 5 or parts[2] != "blob":
+        raise ValueError("Invalid GitHub blob URL format")
+    
+    owner = parts[0]
+    repo = parts[1]
+    branch = parts[3]
+    file_path = "/".join(parts[4:])
+    
+    return owner, repo, branch, file_path
 
 def should_notify(series_name, chapter, series_job):
     if series_job.job_type == utils.constants.JobType.Typesetting or series_job.job_type == utils.constants.JobType.TypesettingSFX:
@@ -268,41 +287,109 @@ async def scheduled_upload_task():
             )
             message = await channel.send(embed=embed)
 
-            session_id = bot.mangadex.check_for_session()
-            if session_id:
-                bot.mangadex.abandon_session(session_id)
+            website_links = []
 
-            session_id = bot.mangadex.create_session(scheduled_upload.group_ids, scheduled_upload.series_id)
-            if not session_id:
-                embed = discord.Embed(
-                    title=":red_square: Upload Scheduler",
-                    description=f"Uploading chapter `{scheduled_upload.chapter_number}` in `{scheduled_upload.series_name}` by `{scheduled_upload.group_name}`\nStatus: `Failed to create session.`",
-                    color=discord.Color.blue()
-                )
+            if "mangadex" in scheduled_upload.upload_websites:
+                session_id = bot.mangadex.check_for_session()
+                if session_id:
+                    bot.mangadex.abandon_session(session_id)
+
+                session_id = bot.mangadex.create_session(scheduled_upload.group_ids, scheduled_upload.series_id)
+                if not session_id:
+                    embed = discord.Embed(
+                        title=":red_square: Upload Scheduler",
+                        description=f"Uploading chapter `{scheduled_upload.chapter_number}` in `{scheduled_upload.series_name}` by `{scheduled_upload.group_name}`\nStatus: `Failed to create session.`",
+                        color=discord.Color.blue()
+                    )
+                    await message.edit(embed=embed)
+                    return
+
+                embed.description = f"Uploading chapter `{scheduled_upload.chapter_number}` in `{scheduled_upload.series_name}` by `{scheduled_upload.group_name}`\nStatus: `Uploading to mangadex...`"
                 await message.edit(embed=embed)
-                return
+                
+                chapter_id = bot.mangadex.upload_chapter(session_id, scheduled_upload.volume_number, scheduled_upload.chapter_number, scheduled_upload.chapter_name, scheduled_upload.language, scheduled_upload.folder_name, 1)
 
-            embed.description = f"Uploading chapter `{scheduled_upload.chapter_number}` in `{scheduled_upload.series_name}` by `{scheduled_upload.group_name}`\nStatus: `Uploading...`"
-            await message.edit(embed=embed)
+                if not chapter_id:
+                    embed = discord.Embed(
+                        title=":red_square: Upload Scheduler",
+                        description=f"Uploading chapter `{scheduled_upload.chapter_number}` in `{scheduled_upload.series_name}` by `{scheduled_upload.group_name}`\nStatus: `Failed to upload the chapter.`",
+                        color=discord.Color.blue()
+                    )
+                    await message.edit(embed=embed)
+                    return
+                
+                website_links.append({ "website": "mangadex", "url": f"https://mangadex.org/chapter/{chapter_id}" })
+                
             
-            chapter_id = bot.mangadex.upload_chapter(session_id, scheduled_upload.volume_number, scheduled_upload.chapter_number, scheduled_upload.chapter_name, scheduled_upload.language, scheduled_upload.folder_name, 1)
-
-            if not chapter_id:
-                embed = discord.Embed(
-                    title=":red_square: Upload Scheduler",
-                    description=f"Uploading chapter `{scheduled_upload.chapter_number}` in `{scheduled_upload.series_name}` by `{scheduled_upload.group_name}`\nStatus: `Failed to upload the chapter.`",
-                    color=discord.Color.blue()
-                )
+            if "cubari" in scheduled_upload.upload_websites:
+                embed.description = f"Uploading chapter `{scheduled_upload.chapter_number}` in `{scheduled_upload.series_name}` by `{scheduled_upload.group_name}`\nStatus: `Uploading to cubari...`"
                 await message.edit(embed=embed)
-                return
+
+                # Upload to catbox
+                IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif")
+                image_files = natsorted(
+                    [f for f in os.listdir(scheduled_upload.folder_name) if f.lower().endswith(IMAGE_EXTENSIONS)]
+                )
+                file_paths = [os.path.join(scheduled_upload.folder_name, f) for f in image_files]
+                uploaded_urls = [bot.catbox.upload(file_path) for file_path in file_paths]
+
+                chapter_number = str(scheduled_upload.chapter_number)
+
+                new_chapter_data = {
+                    "last_updated": str(int(time.time())),
+                    "groups": {
+                        scheduled_upload.group_name: uploaded_urls
+                    }
+                }
+
+                if scheduled_upload.chapter_name:
+                    new_chapter_data["title"] = scheduled_upload.chapter_name
+
+                if scheduled_upload.volume_number:
+                    new_chapter_data["volume"] = str(scheduled_upload.volume_number)
+
+                owner, repo, branch, file_name = parse_github_url(scheduled_upload.github_link)
+                url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_name}"
+                headers = {
+                    "Authorization": f"token {os.getenv('GitHubToken')}",
+                    "Accept": "application/vnd.github.v3+json"
+                }
+                response = requests.get(url, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+
+                content = base64.b64decode(data["content"]).decode("utf-8")
+                json_data = json.loads(content)
+                json_data.setdefault("chapters", {})[chapter_number] = new_chapter_data
+
+                updated_content = json.dumps(json_data, indent=2)
+                encoded_content = base64.b64encode(updated_content.encode("utf-8")).decode("utf-8")
+
+                commit_message = f"[{scheduled_upload.series_name}] Add chapter {chapter_number}"
+                update_data = {
+                    "message": commit_message,
+                    "content": encoded_content,
+                    "branch": branch,
+                    "sha": data["sha"]
+                }
+                update_response = requests.put(url, headers=headers, json=update_data)
+                update_response.raise_for_status()
+
+                raw_url = f"raw/{owner}/{repo}/{branch}/{file_name}"
+
+                encoded = base64.b64encode(raw_url.encode("utf-8")).decode()
+                website_links.append({ "website": "cubari", "url": f"https://cubari.moe/read/gist/{encoded}/{scheduled_upload.chapter_number}/1" })
 
             embed = discord.Embed(
                 title=":green_square: Upload Scheduler",
                 description=f"Uploading chapter `{scheduled_upload.chapter_number}` in `{scheduled_upload.series_name}` by `{scheduled_upload.group_name}`\nStatus: `Uploaded.`",
                 color=discord.Color.blue()
             )
+
             await message.edit(embed=embed)
-            await channel.send(content=f"<@{scheduled_upload.discord_id}> chapter is uploaded: https://mangadex.org/chapter/{chapter_id}")
+            
+            formatted_message = " • ".join(f"[{item['website']}](<{item['url']}>)" for item in website_links)
+            await channel.send(content=f"<@{scheduled_upload.discord_id}> chapter is uploaded: {formatted_message}")
 
             if os.path.exists(scheduled_upload.folder_name):
                 shutil.rmtree(scheduled_upload.folder_name)
@@ -337,5 +424,7 @@ bot.database = DatabaseManager(database=os.getenv("PostgresDatabase"), host=os.g
 
 bot.mangadex = MangaDexAPI()
 bot.mangadex.login(client_id=os.getenv("MangaDexId"), client_secret=os.getenv("MangaDexSecret"), username=os.getenv("MangaDexLogin"), password=os.getenv("MangaDexPassword"))
+
+bot.catbox = CatboxClient(userhash=os.getenv("CatBoxUserHash"))
 
 bot.run(os.getenv("DiscordToken"))

@@ -1,0 +1,3 @@
+ALTER TABLE series
+ADD COLUMN github_link VARCHAR(255) NULL,
+ADD COLUMN blocked_websites VARCHAR(100)[] NULL;
