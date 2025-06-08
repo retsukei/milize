@@ -9,3 +9,4 @@ psd-tools==1.9.34
 pillow==10.4.0
 catboxpy==0.1.0
 httpx==0.28.1
+google-genapi==1.19.0
