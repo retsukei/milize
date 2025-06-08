@@ -9,7 +9,7 @@ class Assignments:
     @check_connection
     def new(self, chapter_id, series_job_id, user_id):
         try:
-            self.cursor.execute("INSERT INTO jobsassignments (chapter_id, series_job_id, assigned_to) VALUES (%s, %s, %s) ON CONFLICT (chapter_id, series_job_id) DO NOTHING RETURNING assignment_id;", (chapter_id, series_job_id, user_id))
+            self.cursor.execute("INSERT INTO jobsassignments (chapter_id, series_job_id, assigned_to) VALUES (%s, %s, %s) ON CONFLICT (chapter_id, series_job_id, assigned_to) DO NOTHING RETURNING assignment_id;", (chapter_id, series_job_id, user_id))
             self.connection.commit()
 
             assignment = self.cursor.fetchone()
@@ -32,6 +32,22 @@ class Assignments:
         except Exception as e:
             self.connection.rollback()
             print(f"Failed to get job assignments for user '{user_id}': {e}")
+            return None
+        
+    @check_connection
+    def get_user_latest(self, user_id, status):
+        try:
+            query = """
+                SELECT assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at, reminded_at
+                FROM jobsassignments
+                WHERE assigned_to = %s AND status = %s
+                ORDER BY created_at DESC
+                LIMIT 1
+            """
+            self.cursor.execute(query, (user_id, status))
+            return self.cursor.fetchone()
+        except Exception as e:
+            print(f"Failed to get latest job assignment for user '{user_id}' with status '{status}': {e}")
             return None
 
     @check_connection
@@ -94,6 +110,15 @@ class Assignments:
             self.connection.rollback()
             print(f"Failed to get job assignment for chapter id '{chapter_id}': {e}")
             return None
+        
+    @check_connection
+    def get_all(self, chapter_id, series_job_id):
+        try:
+            self.cursor.execute("SELECT assignment_id, chapter_id, series_job_id, assigned_to, status, created_at, completed_at FROM jobsassignments WHERE chapter_id = %s AND series_job_id = %s", (chapter_id, series_job_id))
+            return self.cursor.fetchall()
+        except Exception as e:
+            print(f"Failed to get job assignment for chapter id '{chapter_id}': {e}")
+            return None
 
     @check_connection
     def get_for_chapter(self, chapter_id):
@@ -104,6 +129,23 @@ class Assignments:
         except Exception as e:
             self.connection.rollback()
             print(f"Failed to get job assignments for chapter id '{chapter_id}': {e}")
+            return None
+        
+    @check_connection
+    def get_for_series(self, series_id):
+        try:
+            query = """
+                SELECT ja.assignment_id, ja.chapter_id, ja.series_job_id, ja.assigned_to, ja.status, ja.created_at, ja.completed_at
+                FROM jobsassignments ja
+                JOIN chapters c ON ja.chapter_id = c.chapter_id
+                WHERE c.series_id = %s
+            """
+            self.cursor.execute(query, (series_id,))
+            self.connection.commit()
+            return self.cursor.fetchall()
+        except Exception as e:
+            self.connection.rollback()
+            print(f"Failed to get job assignments for series id '{series_id}': {e}")
             return None
         
     @check_connection

@@ -472,14 +472,31 @@ class Jobs(commands.Cog):
         embed.set_author(name=f"Jobs for {series_name} ({group_name})")
 
         for i, (series_job_id, job_id, job_name, _, _, _) in enumerate(series_jobs, start=1):
+            assignments = ctx.bot.database.assignments.get_all(chapter.chapter_id, series_job_id)
             field = ''
-            assignment = ctx.bot.database.assignments.get(chapter.chapter_id, series_job_id)
 
-            if assignment:
-                user = await ctx.bot.get_or_fetch_user(int(assignment.assigned_to))
-                member = ctx.bot.database.members.get(assignment.assigned_to)
-                display_name = "<unknown>" if not user else user.display_name
-                field = f"Assigned to: {display_name if member is None or member.credit_name is None else member.credit_name}\nStatus: {JobStatus.to_string(assignment.status)}"
+            if assignments:
+                if len(assignments) == 1:
+                    assignment = assignments[0]
+                    user = await ctx.bot.get_or_fetch_user(int(assignment.assigned_to))
+                    member = ctx.bot.database.members.get(assignment.assigned_to)
+
+                    display_name = "<unknown>" if not user else user.display_name
+                    credit_name = member.credit_name if member and member.credit_name else display_name
+
+                    field = f"Assigned to: {credit_name}\nStatus: {JobStatus.to_string(assignment.status)}"
+                else:
+                    user_strings = []
+                    for assignment in assignments:
+                        user = await ctx.bot.get_or_fetch_user(int(assignment.assigned_to))
+                        member = ctx.bot.database.members.get(assignment.assigned_to)
+
+                        display_name = "<unknown>" if not user else user.display_name
+                        credit_name = member.credit_name if member and member.credit_name else display_name
+
+                        user_strings.append(f"{credit_name} ({JobStatus.to_string(assignment.status)})")
+
+                    field = f"Assigned to:\n{', '.join(user_strings)}"
             else:
                 field = "Assigned to: None\nStatus: Backlog"
 

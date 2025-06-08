@@ -262,12 +262,13 @@ class Chapter(commands.Cog):
         upload_websites = ["mangadex", "cubari"]
         blocked = series.blocked_websites or []
         allowed_websites = [w for w in upload_websites if w not in blocked]
+        selected_websites = []
 
         options = [
             discord.SelectOption(
                 label=website,
                 value=website,
-                default=website in upload_websites  # You can tweak this if default selection logic changes
+                default=True
             ) for website in allowed_websites
         ]
 
@@ -311,12 +312,13 @@ class Chapter(commands.Cog):
 
             view.remove_item(select_menu)
 
+            websites_to_upload = selected_websites if selected_websites else allowed_websites
             options = [
                 discord.SelectOption(
                     label=website,
                     value=website,
-                    default=website in upload_websites
-                ) for website in allowed_websites
+                    default=True
+                ) for website in websites_to_upload
             ]
 
             select_menu = discord.ui.Select(
@@ -458,8 +460,8 @@ class Chapter(commands.Cog):
                 return
             
             await interaction.response.defer()
-            upload_websites.clear()
-            upload_websites.extend(select_menu.values)
+            selected_websites.clear()
+            selected_websites.extend(select_menu.values)
 
         async def proceed_callback(interaction: discord.Interaction):
             if interaction.user.id != ctx.author.id:
@@ -599,6 +601,7 @@ class Chapter(commands.Cog):
 
                 series_id = re.search(r"mangadex\.org/title/([\w-]+)", series.mangadex)[1]
 
+                websites_to_upload = selected_websites if selected_websites else allowed_websites
                 upload_id = ctx.bot.database.chapters.new_upload_schedule(
                     volume_number,
                     chapter_number,
@@ -612,7 +615,7 @@ class Chapter(commands.Cog):
                     series.series_name,
                     group.group_name,
                     series.github_link,
-                    upload_websites,
+                    websites_to_upload,
                     chapter.chapter_id
                 )
 

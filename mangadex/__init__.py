@@ -52,7 +52,7 @@ class MangaDexAPI:
             "refresh_token": self.refresh_token
         }
 
-        response = request_body.post(AUTH_URL, data=request_body)
+        response = self._request("POST", AUTH_URL, True, data=request_body)
         if response.status_code == 200:
             self.access_token = response.json()['access_token']
             self.refresh_token = response.json()['refresh_token']

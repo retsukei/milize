@@ -188,7 +188,7 @@ class Members:
     @check_connection
     def update_activity(self, user_id):
         try:
-            self.cursor.execute("UPDATE members SET reminded_at = NULL WHERE discord_id = %s", (user_id,))
+            self.cursor.execute("UPDATE members SET reminded_at = NULL WHERE discord_id = '%s'", (user_id,))
             self.connection.commit()
             return self.cursor.rowcount
         except Exception as e:

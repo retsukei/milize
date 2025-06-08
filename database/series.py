@@ -26,23 +26,41 @@ class Series:
             return None
 
     @check_connection
-    def get(self, group_name, series_name):
+    def get_all(self):
         try:
             query = """
-                SELECT s.series_id, s.series_name, s.series_drive_link, s.style_guide, s.mangadex, g.group_id, g.group_name, s.thumbnail, s.is_archived,
-                s.github_link, s.blocked_websites
+                SELECT s.series_id, s.series_name, s.series_drive_link, s.style_guide, s.mangadex,
+                    g.group_id, g.group_name, s.thumbnail, s.is_archived,
+                    s.github_link, s.blocked_websites
                 FROM series s
-                JOIN groups g ON s.group_id = g.group_id
-                WHERE g.group_name = %s AND s.series_name = %s;
+                JOIN groups g ON s.group_id = g.group_id;
             """
 
-            self.cursor.execute(query, (group_name, series_name))
+            self.cursor.execute(query)
             self.connection.commit()
-            return self.cursor.fetchone()
+            return self.cursor.fetchall()
         except Exception as e:
             self.connection.rollback()
-            print(f"Failed to select series '{series_name}' from group '{group_name}': {e}")
+            print(f"Failed to select all series: {e}")
             return []
+        
+    @check_connection
+    def get_by_name(self, name: str):
+        try:
+            query = """
+                SELECT s.series_id, s.series_name, s.series_drive_link, s.style_guide, s.mangadex,
+                    g.group_id, g.group_name, s.thumbnail, s.is_archived,
+                    s.github_link, s.blocked_websites
+                FROM series s
+                JOIN groups g ON s.group_id = g.group_id
+                WHERE LOWER(s.series_name) = LOWER(%s)
+                LIMIT 1;
+            """
+            self.cursor.execute(query, (name,))
+            return self.cursor.fetchone()
+        except Exception as e:
+            print(f"Failed to get series by name '{name}': {e}")
+            return None
 
     @check_connection
     def delete(self, group_name, series_name):
